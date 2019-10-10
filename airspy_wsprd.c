@@ -222,7 +222,7 @@ int rx_callback(airspy_transfer_t* transfer) {
 void postSpots(uint32_t n_results) {
     CURL *curl;
     CURLcode res;
-    char url[256]; // FIXME, possible buffer overflow
+    char url[1024]; 
 
     for (uint32_t i=0; i<n_results; i++) {
         sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.1_wsprd&mode=2",
@@ -248,6 +248,7 @@ void postSpots(uint32_t n_results) {
     }
     if (n_results == 0)
         printf("No spot\n");
+    fflush(stdout);
 }
 
 
@@ -372,9 +373,7 @@ void initDecoder_options() {
 
 /* Default options for the receiver */
 void initrx_options() {
-    rx_options.lnaGain = 3;    // DEFAULT_LNA_GAIN
-    rx_options.mixerGain = 5;  // DEFAULT_MIXER_GAIN
-    rx_options.vgaGain = 5;    // DEFAULT_VGA_IF_GAIN
+    rx_options.linearitygain= 12;
     rx_options.bias = 0;       // No bias
     rx_options.shift = 0;
     rx_options.rate = 2500000;
@@ -397,9 +396,7 @@ void usage(void) {
             "\t-c your callsign (12 chars max)\n"
             "\t-g your locator grid (6 chars max)\n"
             "Receiver extra options:\n"
-            "\t-l LNA gain [0-14] (default: 3)\n"
-            "\t-m MIXER gain [0-15] (default: 5)\n"
-            "\t-v VGA gain [0-15] (default: 5)\n"
+            "\t-l linearity gain [0-21] (default: 12)\n"
             "\t-b set Bias Tee [0-1], (default: 0 disabled)\n"
             "\t-r sampling rate [2.5M, 3M, 6M, 10M], (default: 2.5M)\n"
             "\t-p frequency correction (default: 0)\n"
@@ -436,7 +433,7 @@ int main(int argc, char** argv) {
     if (argc <= 1)
         usage();
 
-    while ((opt = getopt(argc, argv, "f:c:g:r:l:m:v:b:s:p:u:k:H:Q:S")) != -1) {
+    while ((opt = getopt(argc, argv, "f:c:g:r:l:b:s:p:u:k:H:Q:S")) != -1) {
         switch (opt) {
         case 'f': // Frequency
             rx_options.dialfreq = (uint32_t)atofs(optarg);
@@ -451,19 +448,9 @@ int main(int argc, char** argv) {
             rx_options.rate = (uint32_t)atofs(optarg);
             break;
         case 'l': // LNA gain
-            rx_options.lnaGain = (uint32_t)atoi(optarg);
-            if (rx_options.lnaGain < 0) rx_options.lnaGain = 0;
-            if (rx_options.lnaGain > 14 ) rx_options.lnaGain = 14;
-            break;
-        case 'm': // Mixer gain
-            rx_options.mixerGain = (uint32_t)atoi(optarg);
-            if (rx_options.mixerGain < 0) rx_options.mixerGain = 0;
-            if (rx_options.mixerGain > 15) rx_options.mixerGain = 15;
-            break;
-        case 'v': // VGA gain
-            rx_options.vgaGain = (uint32_t)atoi(optarg);
-            if (rx_options.vgaGain < 0) rx_options.vgaGain = 0;
-            if (rx_options.vgaGain > 15) rx_options.vgaGain = 15;
+            rx_options.linearitygain = (uint32_t)atoi(optarg);
+            if (rx_options.linearitygain < 0) rx_options.linearitygain = 0;
+            if (rx_options.linearitygain > 21 ) rx_options.linearitygain = 21;
             break;
         case 'b': // Bias setting
             rx_options.bias = (uint32_t)atoi(optarg);
@@ -590,19 +577,9 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    result = airspy_set_vga_gain(device, rx_options.vgaGain);
+    result = airspy_set_linearity_gain(device, rx_options.linearitygain);
     if( result != AIRSPY_SUCCESS ) {
-        printf("airspy_set_vga_gain() failed: %s (%d)\n", airspy_error_name(result), result);
-    }
-
-    result = airspy_set_mixer_gain(device, rx_options.mixerGain);
-    if( result != AIRSPY_SUCCESS ) {
-        printf("airspy_set_mixer_gain() failed: %s (%d)\n", airspy_error_name(result), result);
-    }
-
-    result = airspy_set_lna_gain(device, rx_options.lnaGain);
-    if( result != AIRSPY_SUCCESS ) {
-        printf("airspy_set_lna_gain() failed: %s (%d)\n", airspy_error_name(result), result);
+        printf("airspy_set_linearity_gain() failed: %s (%d)\n", airspy_error_name(result), result);
     }
 
     result = airspy_set_freq(device, rx_options.realfreq + rx_options.fs4 + 1500);  // Dial + offset + 1500Hz
@@ -643,9 +620,7 @@ int main(int argc, char** argv) {
     printf("  Real freq.   : %d Hz\n", rx_options.realfreq);
     printf("  Rate         : %d Hz\n", rx_options.rate);
     printf("  Decimation   : %d\n", rx_options.downsampling);
-    printf("  LNA gain     : %d dB\n", rx_options.lnaGain);
-    printf("  Mixer gain   : %d dB\n", rx_options.mixerGain);
-    printf("  VGA gain     : %d dB\n", rx_options.vgaGain);
+    printf("  Gain         : %d\n", rx_options.linearitygain);
     printf("  Bias         : %s\n", rx_options.bias ? "yes" : "no");
     printf("  Bits packing : %s\n", rx_options.packing ? "yes" : "no");
     printf("  S/N          : 0x%08X%08X\n", readSerial.serial_no[2], readSerial.serial_no[3]);
