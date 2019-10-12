@@ -230,8 +230,8 @@ void postSpots(uint32_t n_results) {
                 dec_results[i].snr, dec_results[i].dt, dec_results[i].freq,
                 dec_results[i].call, dec_results[i].loc, dec_results[i].pwr);
 
-        printf("Spot : %3.2f %4.2f %10.6f %2d  %-s\n",
-               dec_results[i].snr, dec_results[i].dt, dec_results[i].freq,
+        printf("%s %3.2f %4.2f %10.6f %2d  %-s\n",
+               dec_options.uttime,dec_results[i].snr, dec_results[i].dt, dec_results[i].freq,
                (int)dec_results[i].drift, dec_results[i].message);
 
         curl = curl_easy_init();
@@ -247,7 +247,7 @@ void postSpots(uint32_t n_results) {
         }
     }
     if (n_results == 0)
-        printf("No spot\n");
+        printf("%s No spot\n",dec_options.uttime);
     fflush(stdout);
 }
 
