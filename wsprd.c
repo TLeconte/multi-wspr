@@ -596,9 +596,10 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
         fmax += dialfreq_error;
 
         // Don't waste time on signals outside of the range [fmin,fmax].
+	// and with too low snr
         i=0;
         for( j=0; j<npk; j++) {
-            if( freq0[j] >= fmin && freq0[j] <= fmax ) {
+            if( freq0[j] >= fmin && freq0[j] <= fmax && snr0[j]>-29.0) {
                 freq0[i]=freq0[j];
                 snr0[i]=snr0[j];
                 i++;
