@@ -183,7 +183,22 @@ void postSpots(uint32_t n_results) {
     CURLcode res;
     char url[1024]; 
 
+    if (n_results == 0) {
+        printf("%s No spot\n",dec_options.uttime);
+        fflush(stdout);
+        return ;
+    }
+
+    curl = curl_easy_init();
+    if(curl) {
+            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
+    } else {
+           fprintf(stderr, "curl_easy_init() failed\n");
+    }
+
     for (uint32_t i=0; i<n_results; i++) {
+
         sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.1_wsprd&mode=2",
                 dec_options.rcall, dec_options.rloc, dec_results[i].freq, dec_options.date, dec_options.uttime,
                 dec_results[i].snr, dec_results[i].dt, dec_results[i].freq,
@@ -193,22 +208,21 @@ void postSpots(uint32_t n_results) {
                dec_options.uttime,dec_results[i].snr, dec_results[i].dt, dec_results[i].freq,
                (int)dec_results[i].drift, dec_results[i].message);
 
-        curl = curl_easy_init();
         if(curl) {
-            curl_easy_setopt(curl, CURLOPT_URL, url);
-            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+	    int try=0;
+	    do {
+		sleep(1);
+		try++;
 
-            res = curl_easy_perform(curl);
+                curl_easy_setopt(curl, CURLOPT_URL, url);
+            	res = curl_easy_perform(curl);
 
+	    } while(res != CURLE_OK && try<3 ); 
             if(res != CURLE_OK)
-                fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
-
-            curl_easy_cleanup(curl);
+               	fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
         }
     }
-    if (n_results == 0)
-        printf("%s No spot\n",dec_options.uttime);
-    fflush(stdout);
+    if(curl) curl_easy_cleanup(curl);
 }
 
 
@@ -553,7 +567,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    /* reduce if badwidth */
+    /* reduce if bandwidth */
     airspy_r820t_write(device, 11, 0xE0 | 11);
 
     /* Sampling run non-stop, for stability and sample are dropped or stored */
