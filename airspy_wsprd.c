@@ -43,11 +43,10 @@
 
 #include "airspy_wsprd.h"
 #include "wsprd.h"
-
+#include "filter.h"
 
 /* TODO
  - BUG : bit packing not working
- - clean/fix samplerate selection
  - clean/fix serial number section
  - multispot report in one post
  - type fix (uint32_t etc..)
@@ -57,7 +56,8 @@
 
 #define SIGNAL_LENGHT      116
 #define SIGNAL_SAMPLE_RATE 375
-
+#define AIRSPY_SAMPLE_RATE 5000000
+#define CICDOWNSAMPLE (3*AIRSPY_SAMPLE_RATE/SIGNAL_SAMPLE_RATE/5)
 
 /* Global declaration for these structs */
 struct receiver_state   rx_state;
@@ -79,121 +79,81 @@ struct decoder_state {
 struct decoder_state dec;
 
 
+#define N 4
+#define FIRLEN 31
+
 /* Callback for each buffer received */
 int rx_callback(airspy_transfer_t* transfer) {
     int16_t *sigIn = (int16_t*) transfer->samples;
     uint32_t sigLenght = transfer->sample_count;
 
-    static uint32_t decimationIndex=0;
+    static uint32_t decimationIndex=0,mixerphase=0,polyphase=0;
 
     /* CIC buffers */
-    static int32_t  Ix1,Ix2,Qx1,Qx2;
-    static int32_t  Iy1,It1y,It1z,Qy1,Qt1y,Qt1z;
-    static int32_t  Iy2,It2y,It2z,Qy2,Qt2y,Qt2z;
+    static int64_t  Ix[N],Qx[N];
+    static int64_t  Itz[N],Qtz[N];
 
     /* FIR compensation filter buffers */
-    static float    firI[32], firQ[32];
+    static float    firI[FIRLEN], firQ[FIRLEN];
+    
+    for(int32_t i=0; i<sigLenght; i++) {
+	int32_t st,j,k;
+    	float Isum,Qsum;
+        int64_t  Iy,Ity,Qy,Qty;
 
-    /* FIR compensation filter coefs
-       Using : Octave/MATLAB code for generating compensation FIR coefficients
-       URL : https://github.com/WestCoastDSP/CIC_Octave_Matlab
-     */
-    const static float zCoef[33] = {
-        -0.0027772683, -0.0005058826,  0.0049745750, -0.0034059318,
-        -0.0077557814,  0.0139375423,  0.0039896935, -0.0299394142,
-        0.0162250643,  0.0405130860, -0.0580746013, -0.0272104968,
-        0.1183705475, -0.0306029022, -0.2011241667,  0.1615898423,
-        0.5000000000,
-        0.1615898423, -0.2011241667, -0.0306029022,  0.1183705475,
-        -0.0272104968, -0.0580746013,  0.0405130860,  0.0162250643,
-        -0.0299394142,  0.0039896935,  0.0139375423, -0.0077557814,
-        -0.0034059318,  0.0049745750, -0.0005058826, -0.0027772683
-    };
-    float Isum,Qsum;
+    	/* mixer + 1st CIC integrator */
+	switch(mixerphase) {
+		case 0 :
+   			Ix[0] -= (int64_t)(sigIn[i]-2048);
+			break;
+		case 1 :
+   			Qx[0] -= (int64_t)(sigIn[i]-2048);
+			break;
+		case 2 :
+   			Ix[0] += (int64_t)(sigIn[i]-2048);
+			break;
+		case 3 :
+   			Qx[0] += (int64_t)(sigIn[i]-2048);
+			break;
+	}
+	mixerphase=(mixerphase+1) & 3;
 
-    /* Convert unsigned signal to signed, without bit shift */
-    for(uint32_t i=0; i<sigLenght; i++)
-        sigIn[i] = (sigIn[i] & 0xFFF) - 2048;
+	/* N-1 cic integrators */
+	for(st=1;st<N;st++)  {
+        	Ix[st] += Ix[st-1]; Qx[st] += Qx[st-1];
+	}
 
-    /* Economic mixer @ fs/4 (upper band)
-       At fs/4, sin and cosin calculation are no longueur necessary.
-
-               0   | pi/2 |  pi  | 3pi/2
-             ----------------------------
-       sin =   0   |  1   |  0   |  -1  |
-       cos =   1   |  0   | -1   |   0  |
-
-       out_I = in_I * cos(x) - in_Q * sin(x)
-       out_Q = in_Q * cos(x) + in_I * sin(x)
-       (Weaver technique, keep the lower band)
-    */
-    int16_t tmp;
-    for (uint32_t i=0; i<sigLenght; i+=8) {
-        tmp = sigIn[i+3];
-        sigIn[i+3] = -sigIn[i+2];
-        sigIn[i+2] = tmp;
-
-        sigIn[i+4] = -sigIn[i+4];
-        sigIn[i+5] = -sigIn[i+5];
-
-        tmp = sigIn[i+6];
-        sigIn[i+6] = -sigIn[i+7];
-        sigIn[i+7] = tmp;
-    }
-
-    /* CIC decimator (N=2)
-       (could be not perfect in time for some sampling rate.
-       Ex: AirSpy vs AirSpy Mini, but works fine in practice)
-       Info: * Understanding CIC Compensation Filters
-               https://www.altera.com/en_US/pdfs/literature/an/an455.pdf
-             * Understanding cascaded integrator-comb filters
-               http://www.embedded.com/design/configurable-systems/4006446/Understanding-cascaded-integrator-comb-filters
-    */
-    for(int32_t i=0; i<sigLenght/2; i++) {
-        /* Integrator stages (N=2) */
-        Ix1 += (int32_t)sigIn[i*2];
-        Qx1 += (int32_t)sigIn[i*2+1];
-        Ix2 += Ix1;
-        Qx2 += Qx1;
-
-        /* Decimation R=n (ex. rx_options.downsampling=6667) */
+        /* Decimation by CICDOWNSAMPLE */
         decimationIndex++;
-        if (decimationIndex < rx_options.downsampling) {
-            continue;
-        }
+        if (decimationIndex < CICDOWNSAMPLE) continue;
+        decimationIndex = 0;
 
-        // FIXME/TODO : some optimisition here
-        /* 1st Comb */
-        Iy1  = Ix2 - It1z;
-        It1z = It1y;
-        It1y = Ix2;
-        Qy1  = Qx2 - Qt1z;
-        Qt1z = Qt1y;
-        Qt1y = Qx2;
+        /* CIC Comb stages */
+       	Iy  = Ix[N-1] - Itz[0]; Itz[0] = Ix[N-1]; Ity=Iy;
+       	Qy  = Qx[N-1] - Qtz[0]; Qtz[0] = Qx[N-1]; Qty=Qy;
+	for(st=1;st<N;st++)  {
+        	Iy  = Ity - Itz[st]; Itz[st] = Ity; Ity = Iy;
+        	Qy  = Qty - Qtz[st]; Qtz[st] = Qty; Qty = Qy;
+	}
 
-        /* 2nd Comd */
-        Iy2  = Iy1 - It2z;
-        It2z = It2y;
-        It2y = Iy1;
-        Qy2  = Qy1 - Qt2z;
-        Qt2z = Qt2y;
-        Qt2y = Qy1;
-
-        // FIXME/TODO : could be made with int32_t (8 bits, 20 bits)
-        /* FIR compensation filter */
-        Isum=0.0, Qsum=0.0;
-        for (uint32_t j=0; j<32; j++) {
-            Isum += firI[j]*zCoef[j];
-            Qsum += firQ[j]*zCoef[j];
-            if (j<31) {
+        /* FIR compensation filter  + polphase 5/3 downsampler */
+        for (j=0; j<FIRLEN-1; j++) {
                 firI[j] = firI[j+1];
                 firQ[j] = firQ[j+1];
-            }
+	}
+       	firI[FIRLEN-1] = (float)Iy;
+       	firQ[FIRLEN-1] = (float)Qy;
+
+	/* 5/3 downsampling */
+	polyphase+=3;
+	if(polyphase<5) continue ;
+	polyphase-=5;
+
+        Isum=0.0, Qsum=0.0;
+        for (j=0, k=polyphase; k<91; j++,k+=3) {
+            Isum += firI[j]*zCoef[k];
+            Qsum += firQ[j]*zCoef[k];
         }
-        firI[31] = (float)Iy2;
-        firQ[31] = (float)Qy2;
-        Isum += firI[31]*zCoef[32];
-        Qsum += firQ[31]*zCoef[32];
 
         /* Save the result in the buffer */
         if (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
@@ -213,7 +173,6 @@ int rx_callback(airspy_transfer_t* transfer) {
                 //printf("RX done! [Buffer size: %d]\n", rx_state.iqIndex);
             }
         }
-        decimationIndex = 0;
     }
     return 0;
 }
@@ -238,6 +197,7 @@ void postSpots(uint32_t n_results) {
         if(curl) {
             curl_easy_setopt(curl, CURLOPT_URL, url);
             curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+
             res = curl_easy_perform(curl);
 
             if(res != CURLE_OK)
@@ -376,7 +336,6 @@ void initrx_options() {
     rx_options.linearitygain= 12;
     rx_options.bias = 0;       // No bias
     rx_options.shift = 0;
-    rx_options.rate = 2500000;
     rx_options.serialnumber = 0;
     rx_options.packing = 0;
 }
@@ -444,9 +403,6 @@ int main(int argc, char** argv) {
         case 'g': // Locator / Grid
             sprintf(dec_options.rloc, "%.6s", optarg);
             break;
-        case 'r': // sampling rate
-            rx_options.rate = (uint32_t)atofs(optarg);
-            break;
         case 'l': // LNA gain
             rx_options.linearitygain = (uint32_t)atoi(optarg);
             if (rx_options.linearitygain < 0) rx_options.linearitygain = 0;
@@ -506,8 +462,6 @@ int main(int argc, char** argv) {
     }
 
     /* Calcule decimation rate & frequency offset for fs/4 shift */
-    rx_options.fs4 = rx_options.rate / 4;
-    rx_options.downsampling = (uint32_t)round((double)rx_options.rate / 375.0);
     rx_options.realfreq = rx_options.dialfreq + rx_options.shift + rx_options.upconverter;
 
     /* Store the frequency used for the decoder */
@@ -561,7 +515,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    result = airspy_set_samplerate(device, rx_options.rate);
+    result = airspy_set_samplerate(device, AIRSPY_SAMPLE_RATE/2);
     if (result != AIRSPY_SUCCESS) {
         printf("airspy_set_samplerate() failed: %s (%d)\n", airspy_error_name(result), result);
         airspy_close(device);
@@ -582,7 +536,7 @@ int main(int argc, char** argv) {
         printf("airspy_set_linearity_gain() failed: %s (%d)\n", airspy_error_name(result), result);
     }
 
-    result = airspy_set_freq(device, rx_options.realfreq + rx_options.fs4 + 1500);  // Dial + offset + 1500Hz
+    result = airspy_set_freq(device, rx_options.realfreq + 1500); 
     if( result != AIRSPY_SUCCESS ) {
         printf("airspy_set_freq() failed: %s (%d)\n", airspy_error_name(result), result);
         airspy_close(device);
@@ -598,6 +552,9 @@ int main(int argc, char** argv) {
         airspy_exit();
         return EXIT_FAILURE;
     }
+
+    /* reduce if badwidth */
+    airspy_r820t_write(device, 11, 0xE0 | 11);
 
     /* Sampling run non-stop, for stability and sample are dropped or stored */
     result = airspy_start_rx(device, rx_callback, NULL);
@@ -618,8 +575,6 @@ int main(int argc, char** argv) {
     printf("  Locator      : %s\n", dec_options.rloc);
     printf("  Dial freq.   : %d Hz\n", rx_options.dialfreq);
     printf("  Real freq.   : %d Hz\n", rx_options.realfreq);
-    printf("  Rate         : %d Hz\n", rx_options.rate);
-    printf("  Decimation   : %d\n", rx_options.downsampling);
     printf("  Gain         : %d\n", rx_options.linearitygain);
     printf("  Bias         : %s\n", rx_options.bias ? "yes" : "no");
     printf("  Bits packing : %s\n", rx_options.packing ? "yes" : "no");

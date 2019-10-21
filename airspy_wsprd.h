@@ -63,8 +63,6 @@ struct receiver_options {
     int32_t  shift;
     int32_t  upconverter;
     uint32_t rate;
-    uint32_t fs4;
-    uint32_t downsampling;
     uint64_t serialnumber;
     uint64_t readserialno;
     char     date[7];
