@@ -192,7 +192,7 @@ void postSpots(uint32_t n_results) {
     curl = curl_easy_init();
     if(curl) {
             curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15);
     } else {
            fprintf(stderr, "curl_easy_init() failed\n");
     }
@@ -211,7 +211,7 @@ void postSpots(uint32_t n_results) {
         if(curl) {
 	    int try=0;
 	    do {
-		sleep(1);
+		usleep(500000);
 		try++;
 
                 curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -489,6 +489,9 @@ int main(int argc, char** argv) {
     signal(SIGTERM, &sigint_callback_handler);
     signal(SIGABRT, &sigint_callback_handler);
 
+    if(dec_options.usehashtable)
+	loadHashtable();
+
     result = airspy_init();
     if( result != AIRSPY_SUCCESS ) {
         printf("airspy_init() failed: %s (%d)\n", airspy_error_name(result), result);
@@ -648,6 +651,9 @@ int main(int argc, char** argv) {
         }
         airspy_exit();
     }
+
+    if(dec_options.usehashtable)
+	saveHashtable();
 
     printf("Bye!\n");
 

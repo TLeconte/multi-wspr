@@ -71,3 +71,7 @@ void subtract_signal2(float *id, float *qd, long np,
 int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
                     struct decoder_options options, struct decoder_results *decodes,
                     int32_t *n_results);
+
+void loadHashtable(void);
+void saveHashtable(void);
+

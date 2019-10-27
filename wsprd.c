@@ -62,7 +62,7 @@
 #define PATIENCE FFTW_ESTIMATE
 
 
-uint8_t pr3[NSYM]= {
+const uint8_t pr3[NSYM]= {
     1,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,
     0,1,0,1,1,1,1,0,0,0,0,0,0,0,1,0,0,1,0,1,
     0,0,0,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,1,
@@ -74,9 +74,7 @@ uint8_t pr3[NSYM]= {
     0,0
 };
 
-fftwf_plan PLAN1,
-           PLAN2,
-           PLAN3;
+static fftwf_plan PLAN;
 int32_t printdata=0;
 
 
@@ -408,6 +406,35 @@ void subtract_signal2(float *id, float *qd, long np,
     return;
 }
 
+static    char hashtab[32768*13]= {0};
+void loadHashtable(void)
+{
+        FILE *fhash;
+        char line[80], hcall[12];
+        if( (fhash=fopen("hashtable.txt","r+")) ) {
+            while (fgets(line, sizeof(line), fhash) != NULL) {
+    		int32_t nh;
+                sscanf(line,"%d %s",&nh,hcall);
+                strcpy(hashtab+nh*13,hcall);
+            }
+        } else {
+            fhash=fopen("hashtable.txt","w+");
+        }
+        fclose(fhash);
+}
+
+void saveHashtable(void) 
+{
+	FILE *fhash;
+        fhash=fopen("hashtable.txt","w");
+        for (uint32_t i=0; i<32768; i++) {
+            if( strncmp(hashtab+i*13,"\0",1) != 0 ) {
+                fprintf(fhash,"%5d %s\n",i,hashtab+i*13);
+            }
+        }
+        fclose(fhash);
+}
+
 
 
 //***************************************************************************
@@ -416,7 +443,7 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
                     int32_t *n_results) {
 
     int32_t i,j,k;
-    uint32_t metric, maxcycles, cycles, maxnp;
+    uint32_t metric, cycles, maxnp;
     uint8_t symbols[NBITS*2]= {0};
     uint8_t decdata[(NBITS+7)/8]= {0};
     int8_t message[]= {-9,13,-35,123,57,-39,64,0,0,0,0};
@@ -427,7 +454,6 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
     char loc[7]= {0};
     char pwr[3]= {0};
 
-    int32_t delta,verbose=0;
     int32_t writenoise=0,wspr_type=2, ipass;
     int32_t shift1, lagmin, lagmax, lagstep, worth_a_try, not_decoded;
     float freq0[200],snr0[200],drift0[200],sync0[200];
@@ -436,33 +462,31 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
     double freq_print;
     double dialfreq= (double)options.freq / 1e6; // check
     float dialfreq_error=0.0;
+    float fmin=-110.0;
+    float fmax=110.0;
     float f1, fstep, sync1=0.0, drift1;
     int32_t noprint=0;
     int32_t uniques=0;
-    float fmin=-110.0;
-    float fmax=110.0;
-    char hashtab[32768*13]= {0};
-    int32_t nh;
 
     float allfreqs[100];
     char allcalls[100][13];
+
     memset(allfreqs,0,sizeof(float)*100);
     memset(allcalls,0,sizeof(char)*100*13);
 
     // Parameters used for performance-tuning:
-    maxcycles=10000;                         //Fano timeout limit
-    double minsync1=0.10;                    //First sync limit
-    double minsync2=0.12;                    //Second sync limit
-    int32_t iifac=3;                             //Step size in final DT peakup
-    int32_t symfac=50;                           //Soft-symbol normalizing factor
-    int32_t maxdrift=4;                          //Maximum (+/-) drift
-    double minrms=52.0 * (symfac/64.0);      //Final test for plausible decoding
-    delta=60;                                //Fano threshold step
-
-    fftwf_complex *fftin, *fftout;
+    const int32_t maxcycles=10000;                         //Fano timeout limit
+    const double minsync1=0.10;                    //First sync limit
+    const double minsync2=0.12;                    //Second sync limit
+    const int32_t iifac=3;                             //Step size in final DT peakup
+    const int32_t symfac=50;                           //Soft-symbol normalizing factor
+    const int32_t maxdrift=4;                          //Maximum (+/-) drift
+    const double minrms=52.0 * (symfac/64.0);      //Final test for plausible decoding
+    const int32_t delta=60;                                //Fano threshold step
+    const int32_t verbose=0;
 
     int32_t mettab[2][256];
-    float bias=0.42;
+    const float bias=0.42;
 
     // setup metric table
     for(i=0; i<256; i++) {
@@ -470,36 +494,26 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
         mettab[1][i]=round( 10*(metric_tables[2][255-i]-bias) );
     }
 
-    FILE *fp_fftw_wisdom_file, *fhash;
+    fftwf_complex *fftin, *fftout;
 
+/*
     if ((fp_fftw_wisdom_file = fopen("wspr_wisdom.dat", "r"))) {  //Open FFTW wisdom
+        FILE *fp_fftw_wisdom_file;
         fftwf_import_wisdom_from_file(fp_fftw_wisdom_file);
         fclose(fp_fftw_wisdom_file);
     }
+*/
 
     // Do windowed ffts over 2 symbols, stepped by half symbols
     int32_t nffts=4*floor(npoints/512)-1;
     fftin=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
     fftout=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
-    PLAN3 = fftwf_plan_dft_1d(512, fftin, fftout, FFTW_FORWARD, PATIENCE);
+    PLAN = fftwf_plan_dft_1d(512, fftin, fftout, FFTW_FORWARD, PATIENCE);
 
     float ps[512][nffts];
     float w[512];
     for(i=0; i<512; i++) {
         w[i]=sin(0.006147931*i);
-    }
-
-    if( options.usehashtable ) {
-        char line[80], hcall[12];
-        if( (fhash=fopen("hashtable.txt","r+")) ) {
-            while (fgets(line, sizeof(line), fhash) != NULL) {
-                sscanf(line,"%d %s",&nh,hcall);
-                strcpy(hashtab+nh*13,hcall);
-            }
-        } else {
-            fhash=fopen("hashtable.txt","w+");
-        }
-        fclose(fhash);
     }
 
     //*************** main loop starts here *****************
@@ -517,7 +531,7 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
                 fftin[j][0]=idat[k] * w[j];
                 fftin[j][1]=qdat[k] * w[j];
             }
-            fftwf_execute(PLAN3);
+            fftwf_execute(PLAN);
             for (j=0; j<512; j++ ) {
                 k=j+256;
                 if( k>511 )
@@ -844,24 +858,15 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
     fftwf_free(fftin);
     fftwf_free(fftout);
 
+/*
     if ((fp_fftw_wisdom_file = fopen("wspr_wisdom.dat", "w"))) {
+        FILE *fp_fftw_wisdom_file;
         fftwf_export_wisdom_to_file(fp_fftw_wisdom_file);
         fclose(fp_fftw_wisdom_file);
     }
+*/
 
-    fftwf_destroy_plan(PLAN1);
-    fftwf_destroy_plan(PLAN2);
-    fftwf_destroy_plan(PLAN3);
-
-    if( options.usehashtable ) {
-        fhash=fopen("hashtable.txt","w");
-        for (i=0; i<32768; i++) {
-            if( strncmp(hashtab+i*13,"\0",1) != 0 ) {
-                fprintf(fhash,"%5d %s\n",i,hashtab+i*13);
-            }
-        }
-        fclose(fhash);
-    }
+    fftwf_destroy_plan(PLAN);
 
     if(writenoise == 999) return -1;  //Silence compiler warning
     return 0;
