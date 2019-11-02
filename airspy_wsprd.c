@@ -351,7 +351,7 @@ void initrx_options() {
     rx_options.bias = 0;       // No bias
     rx_options.shift = 0;
     rx_options.serialnumber = 0;
-    rx_options.packing = 0;
+    rx_options.packing = 1;
 }
 
 
@@ -514,16 +514,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    if(rx_options.packing) {
-        result = airspy_set_packing(device, 1);
-        if( result != AIRSPY_SUCCESS ) {
-            printf("airspy_set_packing() failed: %s (%d)\n", airspy_error_name(result), result);
-            airspy_close(device);
-            airspy_exit();
-            return EXIT_FAILURE;
-        }
-    }
-
     result = airspy_set_sample_type(device, AIRSPY_SAMPLE_UINT16_REAL);
     if (result != AIRSPY_SUCCESS) {
         printf("airspy_set_sample_type() failed: %s (%d)\n", airspy_error_name(result), result);
@@ -538,6 +528,16 @@ int main(int argc, char** argv) {
         airspy_close(device);
         airspy_exit();
         return EXIT_FAILURE;
+    }
+
+    if(rx_options.packing) {
+        result = airspy_set_packing(device, 1);
+        if( result != AIRSPY_SUCCESS ) {
+            printf("airspy_set_packing() failed: %s (%d)\n", airspy_error_name(result), result);
+            airspy_close(device);
+            airspy_exit();
+            return EXIT_FAILURE;
+        }
     }
 
     result = airspy_set_rf_bias(device, rx_options.bias);
