@@ -41,6 +41,7 @@
 #include <fftw3.h>
 
 #include "wsprd.h"
+#include "wsprnet.h"
 #include "fano.h"
 #include "nhash.h"
 #include "wsprd_utils.h"
@@ -438,9 +439,8 @@ void saveHashtable(void)
 
 
 //***************************************************************************
-int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
-                    struct decoder_options options, struct decoder_results *decodes,
-                    int32_t *n_results) {
+int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints)
+{
 
     int32_t i,j,k;
     uint32_t metric, cycles, maxnp;
@@ -460,7 +460,7 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
     int32_t shift0[200];
     float dt_print;
     double freq_print;
-    double dialfreq= (double)options.freq / 1e6; // check
+    double dialfreq= (double)dec_options.freq / 1e6; // check
     float dialfreq_error=0.0;
     float fmin=-110.0;
     float fmax=110.0;
@@ -517,11 +517,11 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
     }
 
     //*************** main loop starts here *****************
-    for (ipass=0; ipass<options.npasses; ipass++) {
+    for (ipass=0; ipass<dec_options.npasses; ipass++) {
 
         if( ipass == 1 && uniques == 0 ) break;
         if( ipass == 1 ) {  //otherwise we bog down on the second pass
-            options.quickmode = 1;
+            dec_options.quickmode = 1;
         }
 
         memset(ps,0.0, sizeof(float)*512*nffts);
@@ -729,7 +729,7 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
             lagmax=shift1+144;
             lagstep=8;
 
-            if(options.quickmode)
+            if(dec_options.quickmode)
                 lagstep=16;
 
             sync_and_demodulate(idat, qdat, npoints, symbols, &f1, fstep, &shift1,
@@ -774,7 +774,7 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
                                        mettab,delta,maxcycles);
                 }
                 idt++;
-                if( options.quickmode ) break;
+                if( dec_options.quickmode ) break;
             }
 
             if( worth_a_try && !not_decoded ) {
@@ -791,7 +791,7 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
                 // call_loc_pow string and also callsign (for de-duping).
                 noprint=unpk_(message,hashtab,call_loc_pow,call,loc,pwr,callsign);
 
-                if( options.subtraction && (ipass == 0) && !noprint ) {
+                if( dec_options.subtraction && (ipass == 0) && !noprint ) {
                     unsigned char channel_symbols[NSYM];
 
                     if( get_wspr_channel_symbols(call_loc_pow, hashtab, channel_symbols) ) {
@@ -824,36 +824,12 @@ int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
                         dt_print=shift1*DT-2.0;
                     }
 
-                    decodes[uniques-1].sync=sync1;
-                    decodes[uniques-1].snr=snr0[j];
-                    decodes[uniques-1].dt=dt_print;
-                    decodes[uniques-1].freq=freq_print;
-                    decodes[uniques-1].drift=drift1;
-                    decodes[uniques-1].cycles=cycles;
-                    decodes[uniques-1].jitter=ii;
-                    strcpy(decodes[uniques-1].message,call_loc_pow);
-                    strcpy(decodes[uniques-1].call,call);
-                    strcpy(decodes[uniques-1].loc,loc);
-                    strcpy(decodes[uniques-1].pwr,pwr);
+		    postSpot(dec_options.date, dec_options.uttime, freq_print, sync1, snr0[j], dt_print, drift1, ii,call_loc_pow, call, loc, pwr);
+
                 }
             }
         }
     }
-
-    // sort the result
-    struct decoder_results temp;
-    for (j = 1; j <= uniques - 1; j++) {
-        for (k = 0; k < uniques - j ; k++) {
-            if (decodes[k].snr < decodes[k+1].snr) {
-                temp = decodes[k];
-                decodes[k]=decodes[k+1];;
-                decodes[k+1] = temp;
-            }
-        }
-    }
-
-    // Return number of spots to the calling fct
-    *n_results = uniques;
 
     fftwf_free(fftin);
     fftwf_free(fftout);

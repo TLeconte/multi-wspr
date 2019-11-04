@@ -30,18 +30,9 @@
 
 
 #include <unistd.h>
-
-
-#ifndef bool
-typedef uint32_t bool;
-#define true  1
-#define false 0
-#endif
-
+#include <stdbool.h>
 
 struct receiver_state {
-    /* Variables used for stop conditions */
-    bool exit_flag;
     bool decode_flag;
 
     /* Buffer used for sampling */

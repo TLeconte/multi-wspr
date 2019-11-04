@@ -37,36 +37,28 @@
 #include <string.h>
 #include <sys/time.h>
 #include <pthread.h>
-#include <curl/curl.h>
 
 #include <libairspy/airspy.h>
 
 #include "airspy_wsprd.h"
 #include "wsprd.h"
+#include "wsprnet.h"
 #include "filter.h"
-
-/* TODO
- - BUG : bit packing not working
- - clean/fix serial number section
- - multispot report in one post
- - type fix (uint32_t etc..)
- - verbose option
-*/
-
 
 #define SIGNAL_LENGHT      116
 #define SIGNAL_SAMPLE_RATE 375
 #define AIRSPY_SAMPLE_RATE 5000000
 #define CICDOWNSAMPLE (3*AIRSPY_SAMPLE_RATE/SIGNAL_SAMPLE_RATE/5)
 
-/* Global declaration for these structs */
-struct receiver_state   rx_state;
-struct receiver_options rx_options;
-struct decoder_options  dec_options;
-struct decoder_results  dec_results[50];
-struct airspy_device*   device = NULL;
-airspy_read_partid_serialno_t readSerial;
 
+/* Global declaration for these structs */
+struct decoder_options  dec_options;
+
+static struct receiver_options rx_options;
+static struct receiver_state   rx_state;
+
+static struct airspy_device*   device = NULL;
+static airspy_read_partid_serialno_t readSerial;
 
 /* Thread stuff for separate decoding */
 struct decoder_state {
@@ -178,54 +170,6 @@ int rx_callback(airspy_transfer_t* transfer) {
 }
 
 
-void postSpots(uint32_t n_results) {
-    CURL *curl;
-    CURLcode res;
-    char url[1024]; 
-
-    if (n_results == 0) {
-        printf("%s No spot\n",dec_options.uttime);
-        fflush(stdout);
-        return ;
-    }
-
-    curl = curl_easy_init();
-    if(curl) {
-            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15);
-    } else {
-           fprintf(stderr, "curl_easy_init() failed\n");
-    }
-
-    for (uint32_t i=0; i<n_results; i++) {
-
-        sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.1_wsprd&mode=2",
-                dec_options.rcall, dec_options.rloc, dec_results[i].freq, dec_options.date, dec_options.uttime,
-                dec_results[i].snr, dec_results[i].dt, dec_results[i].freq,
-                dec_results[i].call, dec_results[i].loc, dec_results[i].pwr);
-
-        printf("%s %3.2f %4.2f %10.6f %2d  %-s\n",
-               dec_options.uttime,dec_results[i].snr, dec_results[i].dt, dec_results[i].freq,
-               (int)dec_results[i].drift, dec_results[i].message);
-
-        if(curl) {
-	    int try=0;
-	    do {
-		usleep(500000);
-		try++;
-
-                curl_easy_setopt(curl, CURLOPT_URL, url);
-            	res = curl_easy_perform(curl);
-
-	    } while(res != CURLE_OK && try<3 ); 
-            if(res != CURLE_OK)
-               	fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
-        }
-    }
-    if(curl) curl_easy_cleanup(curl);
-}
-
-
 static void *wsprDecoder(void *arg) {
     /* WSPR decoder use buffers of 45000 samples (hardcoded)
        (120 sec max @ 375sps = 45000 samples)
@@ -233,14 +177,13 @@ static void *wsprDecoder(void *arg) {
     static float iSamples[45000]= {0};
     static float qSamples[45000]= {0};
     static uint32_t samples_len;
-    int32_t n_results=0;
 
-    while (!rx_state.exit_flag) {
+    while (!dec_options.exit_flag) {
         pthread_mutex_lock(&dec.ready_mutex);
         pthread_cond_wait(&dec.ready_cond, &dec.ready_mutex);
         pthread_mutex_unlock(&dec.ready_mutex);
 
-        if(rx_state.exit_flag)  // Abord case, final sig
+        if(dec_options.exit_flag)  // Abord case, final sig
             break;
 
         /* Lock the buffer access and make a local copy */
@@ -249,12 +192,6 @@ static void *wsprDecoder(void *arg) {
         memcpy(qSamples, rx_state.qSamples, rx_state.iqIndex * sizeof(float));
         samples_len = rx_state.iqIndex;  // Overkill ?
         pthread_rwlock_unlock(&dec.rw);
-
-        /* Date and time will be updated/overload during the search & decoding process
-           Make a simple copy
-        */
-        memcpy(dec_options.date, rx_options.date, sizeof(rx_options.date));
-        memcpy(dec_options.uttime, rx_options.uttime, sizeof(rx_options.uttime));
 
         /* DEBUG -- Save samples
         printf("Writing file\n");
@@ -265,10 +202,14 @@ static void *wsprDecoder(void *arg) {
         fclose(fd);
         */
 
-        /* Search & decode the signal */
-        wspr_decode(iSamples, qSamples, samples_len, dec_options, dec_results, &n_results);
-        postSpots(n_results);
+        /* Date and time will be updated/overload during the search & decoding process
+           Make a simple copy
+        */
+        memcpy(dec_options.date, rx_options.date, sizeof(rx_options.date));
+        memcpy(dec_options.uttime, rx_options.uttime, sizeof(rx_options.uttime));
 
+        /* Search & decode the signal */
+        wspr_decode(iSamples, qSamples, samples_len);
     }
     pthread_exit(NULL);
 }
@@ -357,7 +298,7 @@ void initrx_options() {
 
 void sigint_callback_handler(int signum) {
     fprintf(stdout, "Caught signal %d\n", signum);
-    rx_state.exit_flag = true;
+    dec_options.exit_flag = true;
 }
 
 
@@ -400,7 +341,7 @@ int main(int argc, char** argv) {
     rx_state.qSamples=malloc(sizeof(float)*SIGNAL_LENGHT*SIGNAL_SAMPLE_RATE);
 
     /* Stop condition setup */
-    rx_state.exit_flag   = false;
+    dec_options.exit_flag   = false;
     rx_state.decode_flag = false;
 
     if (argc <= 1)
@@ -613,8 +554,10 @@ int main(int argc, char** argv) {
     pthread_mutex_init(&dec.ready_mutex, NULL);
     pthread_create(&dec.thread, NULL, wsprDecoder, NULL);
 
+    initWsprNet();
+
     /* Main loop : Wait, read, decode */
-    while (!rx_state.exit_flag) {
+    while (!dec_options.exit_flag) {
         /* Wait for time Sync on 2 mins */
         gettimeofday(&lTime, NULL);
         sec   = lTime.tv_sec % 120;
@@ -633,7 +576,7 @@ int main(int argc, char** argv) {
         initSampleStorage();
 
         while( (airspy_is_streaming(device) == AIRSPY_TRUE) &&
-                (rx_state.exit_flag == false) &&
+                (dec_options.exit_flag == false) &&
                 (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) ) ) {
             usleep(250000);
         }
@@ -656,6 +599,8 @@ int main(int argc, char** argv) {
 	saveHashtable();
 
     printf("Bye!\n");
+
+    stopWrprNet();
 
     /* Wait the thread join (send a signal before to terminate the job) */
     pthread_mutex_lock(&dec.ready_mutex);

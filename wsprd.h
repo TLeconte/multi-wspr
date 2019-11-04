@@ -30,9 +30,11 @@
 
 #pragma once
 
+#include <stdbool.h>
 
 /* Option & config of decoder (Shared with the wsprd code) */
 struct decoder_options {
+    bool     exit_flag;
     uint32_t freq;         // Dial frequency
     char     rcall[13];    // Callsign of the RX station
     char     rloc[7];      // Locator of the RX station
@@ -43,22 +45,7 @@ struct decoder_options {
     uint32_t npasses;      //  ''
     uint32_t subtraction;  //  ''
 };
-
-
-struct decoder_results {
-    double   freq;
-    float    sync;
-    float    snr;
-    float    dt;
-    float    drift;
-    int32_t  jitter;
-    char     message[23];
-    char     call[13];
-    char     loc[7];
-    char     pwr[3];
-    uint32_t cycles;
-};
-
+extern struct decoder_options  dec_options;
 
 void sync_and_demodulate(float *id, float *qd, long np,
                          uint8_t *symbols, float *f1, float fstep,
@@ -68,9 +55,7 @@ void subtract_signal(float *id, float *qd, long np,
                      float f0, int32_t shift0, float drift0, uint8_t* channel_symbols);
 void subtract_signal2(float *id, float *qd, long np,
                       float f0, int32_t shift0, float drift0, uint8_t* channel_symbols);
-int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,
-                    struct decoder_options options, struct decoder_results *decodes,
-                    int32_t *n_results);
+int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints);
 
 void loadHashtable(void);
 void saveHashtable(void);

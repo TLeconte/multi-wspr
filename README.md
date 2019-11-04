@@ -9,4 +9,5 @@ List of mods :
 - Limit input sampling rate to 2.5Ms/s (to ease polyphase filer implementation)
 - Combine Fs/4 mixer with 1st cic filter integrator
 - Load/save hashtable only once and don't load/save fftwisdom data.
+- Add a dedicated thread to send spots to wsprnet.org
  
