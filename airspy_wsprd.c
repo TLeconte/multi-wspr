@@ -64,7 +64,6 @@ static airspy_read_partid_serialno_t readSerial;
 struct decoder_state {
     pthread_t        thread;
 
-    pthread_rwlock_t rw;
     pthread_cond_t   ready_cond;
     pthread_mutex_t  ready_mutex;
 };
@@ -78,6 +77,7 @@ struct decoder_state dec;
 int rx_callback(airspy_transfer_t* transfer) {
     int16_t *sigIn = (int16_t*) transfer->samples;
     uint32_t sigLenght = transfer->sample_count;
+    uint32_t len=0;
 
     static uint32_t decimationIndex=0,mixerphase=0,polyphase=0;
 
@@ -88,6 +88,11 @@ int rx_callback(airspy_transfer_t* transfer) {
     /* FIR compensation filter buffers */
     static float    firI[FIRLEN], firQ[FIRLEN];
     
+    if (rx_state.decode_flag == true) 
+		return 0; 
+
+    //printf("1:rx_callback %d %d\n",rx_state.iqIndex, rx_state.decode_flag);
+
     for(int32_t i=0; i<sigLenght; i++) {
 	int32_t st,j,k;
     	float Isum,Qsum;
@@ -148,24 +153,22 @@ int rx_callback(airspy_transfer_t* transfer) {
         }
 
         /* Save the result in the buffer */
-        if (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
-            /* Lock the buffer during writing */     // Overkill ?!
-            pthread_rwlock_wrlock(&dec.rw);
-            rx_state.iSamples[rx_state.iqIndex] = Isum;
-            rx_state.qSamples[rx_state.iqIndex] = Qsum;
-            pthread_rwlock_unlock(&dec.rw);
-            rx_state.iqIndex++;
-        } else {
-            if (rx_state.decode_flag == false) {
-                /* Send a signal to the other thread to start the decoding */
-                pthread_mutex_lock(&dec.ready_mutex);
-                pthread_cond_signal(&dec.ready_cond);
-                pthread_mutex_unlock(&dec.ready_mutex);
-                rx_state.decode_flag = true;
-                //printf("RX done! [Buffer size: %d]\n", rx_state.iqIndex);
-            }
-        }
+        if ((rx_state.iqIndex+len) < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) && rx_state.decode_flag == false) {
+            rx_state.iSamples[rx_state.iqIndex+len] = Isum;
+            rx_state.qSamples[rx_state.iqIndex+len] = Qsum;
+	    len++;
+        } 
     }
+
+    /* Send a signal to the decoding threads */
+    pthread_mutex_lock(&dec.ready_mutex);
+    rx_state.iqIndex+=len;
+    if (rx_state.iqIndex == (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE)) {
+                rx_state.decode_flag = true;
+    }
+    //printf("2:rx_callback %d %d\n",rx_state.iqIndex, rx_state.decode_flag);
+    pthread_cond_signal(&dec.ready_cond);
+    pthread_mutex_unlock(&dec.ready_mutex);
     return 0;
 }
 
@@ -176,41 +179,51 @@ static void *wsprDecoder(void *arg) {
     */
     static float iSamples[45000]= {0};
     static float qSamples[45000]= {0};
-    static uint32_t samples_len;
-
+    static uint32_t samples_len=0;
+    
     while (!dec_options.exit_flag) {
+	uint32_t len;
+	bool ct;
+
         pthread_mutex_lock(&dec.ready_mutex);
-        pthread_cond_wait(&dec.ready_cond, &dec.ready_mutex);
+        while(samples_len>=rx_state.iqIndex && !dec_options.exit_flag)
+		pthread_cond_wait(&dec.ready_cond, &dec.ready_mutex);
+
+        if(dec_options.exit_flag) {
+        	pthread_mutex_unlock(&dec.ready_mutex);
+		pthread_exit(NULL);
+	}
+
+	len=rx_state.iqIndex-samples_len;
+        ct = rx_state.decode_flag ;
         pthread_mutex_unlock(&dec.ready_mutex);
 
-        if(dec_options.exit_flag)  // Abord case, final sig
-            break;
+        //printf("1:wsprdecode %d %d\n",len, ct);
 
-        /* Lock the buffer access and make a local copy */
-        pthread_rwlock_wrlock(&dec.rw);
-        memcpy(iSamples, rx_state.iSamples, rx_state.iqIndex * sizeof(float));
-        memcpy(qSamples, rx_state.qSamples, rx_state.iqIndex * sizeof(float));
-        samples_len = rx_state.iqIndex;  // Overkill ?
-        pthread_rwlock_unlock(&dec.rw);
+        if (len) {
+        	/* make a local copy */
+        	memcpy(&(iSamples[samples_len]), &(rx_state.iSamples[samples_len]), len * sizeof(float));
+        	memcpy(&(qSamples[samples_len]), &(rx_state.qSamples[samples_len]), len * sizeof(float));
+        	samples_len += len;  
+	}
+        if (!ct) continue;
 
-        /* DEBUG -- Save samples
-        printf("Writing file\n");
-        FILE* fd = NULL;
-        fd = fopen("samples.bin", "wb");
-        int r=fwrite(rx_state.iSamples, sizeof(float), samples_len, fd);
-        printf("%d samples written file\n", r);
-        fclose(fd);
-        */
-
-        /* Date and time will be updated/overload during the search & decoding process
-           Make a simple copy
-        */
-        memcpy(dec_options.date, rx_options.date, sizeof(rx_options.date));
-        memcpy(dec_options.uttime, rx_options.uttime, sizeof(rx_options.uttime));
+        //printf("2:wsprdecode %d\n",ct);
 
         /* Search & decode the signal */
         wspr_decode(iSamples, qSamples, samples_len);
+	samples_len=0;
+
+        pthread_mutex_lock(&dec.ready_mutex);
+        while(rx_state.decode_flag == true && !dec_options.exit_flag)
+		pthread_cond_wait(&dec.ready_cond, &dec.ready_mutex);
+        //printf("3:wsprdecode %d\n",rx_state.decode_flag);
+        pthread_mutex_unlock(&dec.ready_mutex);
+
+        if(dec_options.exit_flag) 
+		pthread_exit(NULL);
     }
+    
     pthread_exit(NULL);
 }
 
@@ -272,8 +285,12 @@ int32_t parse_u64(char* s, uint64_t* const value) {
 
 /* Reset flow control variable & decimation variables */
 void initSampleStorage() {
+    pthread_mutex_lock(&dec.ready_mutex);
     rx_state.decode_flag = false;
     rx_state.iqIndex=0;
+    //printf("initSampleStorage\n");
+    pthread_cond_signal(&dec.ready_cond);
+    pthread_mutex_unlock(&dec.ready_mutex);
 }
 
 
@@ -298,7 +315,10 @@ void initrx_options() {
 
 void sigint_callback_handler(int signum) {
     fprintf(stdout, "Caught signal %d\n", signum);
+    pthread_mutex_lock(&dec.ready_mutex);
     dec_options.exit_flag = true;
+    pthread_cond_broadcast(&dec.ready_cond);
+    pthread_mutex_unlock(&dec.ready_mutex);
 }
 
 
@@ -342,7 +362,7 @@ int main(int argc, char** argv) {
 
     /* Stop condition setup */
     dec_options.exit_flag   = false;
-    rx_state.decode_flag = false;
+    rx_state.decode_flag = true;
 
     if (argc <= 1)
         usage();
@@ -406,14 +426,10 @@ int main(int argc, char** argv) {
 
     if (dec_options.rcall[0] == 0) {
         fprintf(stderr, "Please specify your callsign.\n");
-        fprintf(stderr, " --help for usage...\n");
-        exit(1);
     }
 
     if (dec_options.rloc[0] == 0) {
         fprintf(stderr, "Please specify your locator.\n");
-        fprintf(stderr, " --help for usage...\n");
-        exit(1);
     }
 
     /* Calcule decimation rate & frequency offset for fs/4 shift */
@@ -432,6 +448,10 @@ int main(int argc, char** argv) {
 
     if(dec_options.usehashtable)
 	loadHashtable();
+
+    pthread_cond_init(&dec.ready_cond, NULL);
+    pthread_mutex_init(&dec.ready_mutex, NULL);
+    pthread_create(&dec.thread, NULL, wsprDecoder, NULL);
 
     result = airspy_init();
     if( result != AIRSPY_SUCCESS ) {
@@ -538,48 +558,31 @@ int main(int argc, char** argv) {
     printf("  Bits packing : %s\n", rx_options.packing ? "yes" : "no");
     printf("  S/N          : 0x%08X%08X\n", readSerial.serial_no[2], readSerial.serial_no[3]);
 
-    /* Time alignment stuff */
-    struct timeval lTime;
-    gettimeofday(&lTime, NULL);
-    uint32_t sec   = lTime.tv_sec % 120;
-    uint32_t usec  = sec * 1000000 + lTime.tv_usec;
-    uint32_t uwait = 120000000 - usec;
-    printf("Wait for time sync (start in %d sec)\n\n", uwait/1000000);
-
-    /* Create a thread and stuff for separate decoding
-       Info : https://computing.llnl.gov/tutorials/pthreads/
-    */
-    pthread_rwlock_init(&dec.rw, NULL);
-    pthread_cond_init(&dec.ready_cond, NULL);
-    pthread_mutex_init(&dec.ready_mutex, NULL);
-    pthread_create(&dec.thread, NULL, wsprDecoder, NULL);
-
     initWsprNet();
 
     /* Main loop : Wait, read, decode */
     while (!dec_options.exit_flag) {
+	uint64_t usec,uwait;
+	struct timespec tp;
+
         /* Wait for time Sync on 2 mins */
-        gettimeofday(&lTime, NULL);
-        sec   = lTime.tv_sec % 120;
-        usec  = sec * 1000000 + lTime.tv_usec;
-        uwait = 120000000 - usec + 10000;  // Adding 10ms, to be sure to reach this next minute
-        usleep(uwait);
-        //printf("SYNC! RX started\n");
+	clock_gettime(CLOCK_REALTIME, &tp);
+        usec  = tp.tv_sec * 1000000 + tp.tv_nsec/1000;
+        uwait = 119000000 - usec % 120000000 ;
 
         /* Use the Store the date at the begin of the frame */
-        time ( &rawtime );
-        gtm = gmtime(&rawtime);
-        sprintf(rx_options.date,"%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
-        sprintf(rx_options.uttime,"%02d%02d", gtm->tm_hour, gtm->tm_min);
+        rawtime=(usec+uwait+1500000)/1000000;
+	gtm = gmtime(&rawtime);
+        sprintf(dec_options.date,"%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
+        sprintf(dec_options.uttime,"%02d%02d", gtm->tm_hour, gtm->tm_min);
+
+        usleep(uwait);
+        //printf("SYNC! RX started\n");
 
         /* Start to store the samples */
         initSampleStorage();
 
-        while( (airspy_is_streaming(device) == AIRSPY_TRUE) &&
-                (dec_options.exit_flag == false) &&
-                (rx_state.iqIndex < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) ) ) {
-            usleep(250000);
-        }
+        usleep(100000000);
     }
 
     result = airspy_stop_rx(device);
@@ -609,7 +612,6 @@ int main(int argc, char** argv) {
     pthread_join(dec.thread, NULL);
 
     /* Destroy the lock/cond/thread */
-    pthread_rwlock_destroy(&dec.rw);
     pthread_cond_destroy(&dec.ready_cond);
     pthread_mutex_destroy(&dec.ready_mutex);
     pthread_exit(NULL);
