@@ -94,7 +94,9 @@ static void *sendSpots(void * args) {
     printf("%s %3.2f %4.2f %10.6f %2d  %-s\n",
                spot->uttime,spot->snr,spot->dt,spot->freq,(int)spot->drift,spot->message);
 
-    sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.1_wsprd&mode=2",
+    url[0]=0;
+    if(dec_options.rcall[0] && dec_options.rloc[0])
+	sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.1_wsprd&mode=2",
                 dec_options.rcall, dec_options.rloc, spot->freq, spot->date, spot->uttime,
                 spot->snr, spot->dt, spot->freq,
                 spot->call, spot->loc, spot->pwr);
@@ -107,16 +109,17 @@ static void *sendSpots(void * args) {
     free(spot->pwr);
     free(spot); 
 
-    do {
-    if(curl==NULL)  {
-    	curl = curl_easy_init();
+    if(url[0]) 
+      do {
     	if(curl==NULL)  {
-           fprintf(stderr, "curl_easy_init() failed\n");
-	   break;
-    	}
-        curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20);
-    }
+    		curl = curl_easy_init();
+    		if(curl==NULL)  {
+           		fprintf(stderr, "curl_easy_init() failed\n");
+	   		break;
+    		}
+        	curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+        	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20);
+      }
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
     res = curl_easy_perform(curl);
