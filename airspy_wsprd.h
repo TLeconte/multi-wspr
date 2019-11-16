@@ -36,8 +36,8 @@ struct receiver_state {
     bool decode_flag;
 
     /* Buffer used for sampling */
-    float *iSamples;
-    float *qSamples;
+    int64_t *iSamples;
+    int64_t *qSamples;
 
     /* Simple index */
     uint32_t iqIndex;

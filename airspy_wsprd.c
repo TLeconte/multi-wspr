@@ -46,9 +46,9 @@
 #include "filter.h"
 
 #define SIGNAL_LENGHT      116
-#define SIGNAL_SAMPLE_RATE 375
+#define SIGNAL_SAMPLE_RATE 625
 #define AIRSPY_SAMPLE_RATE 5000000
-#define CICDOWNSAMPLE (3*AIRSPY_SAMPLE_RATE/SIGNAL_SAMPLE_RATE/5)
+#define CICDOWNSAMPLE (AIRSPY_SAMPLE_RATE/SIGNAL_SAMPLE_RATE)
 
 
 /* Global declaration for these structs */
@@ -79,14 +79,10 @@ int rx_callback(airspy_transfer_t* transfer) {
     uint32_t sigLenght = transfer->sample_count;
     uint32_t len=0;
 
-    static uint32_t decimationIndex=0,mixerphase=0,polyphase=0;
+    static uint32_t decimationIndex=0,mixerphase=0;
 
-    /* CIC buffers */
+    /* CIC integrator buffers */
     static int64_t  Ix[N],Qx[N];
-    static int64_t  Itz[N],Qtz[N];
-
-    /* FIR compensation filter buffers */
-    static float    firI[FIRLEN], firQ[FIRLEN];
     
     if (rx_state.decode_flag == true) 
 		return 0; 
@@ -94,9 +90,7 @@ int rx_callback(airspy_transfer_t* transfer) {
     //printf("1:rx_callback %d %d\n",rx_state.iqIndex, rx_state.decode_flag);
 
     for(int32_t i=0; i<sigLenght; i++) {
-	int32_t st,j,k;
-    	float Isum,Qsum;
-        int64_t  Iy,Ity,Qy,Qty;
+	int32_t st;
 
     	/* mixer + 1st CIC integrator */
 	switch(mixerphase) {
@@ -125,37 +119,9 @@ int rx_callback(airspy_transfer_t* transfer) {
         if (decimationIndex < CICDOWNSAMPLE) continue;
         decimationIndex = 0;
 
-        /* CIC Comb stages */
-       	Iy  = Ix[N-1] - Itz[0]; Itz[0] = Ix[N-1]; Ity=Iy;
-       	Qy  = Qx[N-1] - Qtz[0]; Qtz[0] = Qx[N-1]; Qty=Qy;
-	for(st=1;st<N;st++)  {
-        	Iy  = Ity - Itz[st]; Itz[st] = Ity; Ity = Iy;
-        	Qy  = Qty - Qtz[st]; Qtz[st] = Qty; Qty = Qy;
-	}
-
-        /* FIR compensation filter  + polphase 5/3 downsampler */
-        for (j=0; j<FIRLEN-1; j++) {
-                firI[j] = firI[j+1];
-                firQ[j] = firQ[j+1];
-	}
-       	firI[FIRLEN-1] = (float)Iy;
-       	firQ[FIRLEN-1] = (float)Qy;
-
-	/* 5/3 downsampling */
-	polyphase+=3;
-	if(polyphase<5) continue ;
-	polyphase-=5;
-
-        Isum=0.0, Qsum=0.0;
-        for (j=0, k=polyphase; k<91; j++,k+=3) {
-            Isum += firI[j]*zCoef[k];
-            Qsum += firQ[j]*zCoef[k];
-        }
-
-        /* Save the result in the buffer */
         if ((rx_state.iqIndex+len) < (SIGNAL_LENGHT * SIGNAL_SAMPLE_RATE) && rx_state.decode_flag == false) {
-            rx_state.iSamples[rx_state.iqIndex+len] = Isum;
-            rx_state.qSamples[rx_state.iqIndex+len] = Qsum;
+            rx_state.iSamples[rx_state.iqIndex+len] = Ix[N-1];
+            rx_state.qSamples[rx_state.iqIndex+len] = Qx[N-1];
 	    len++;
         } 
     }
@@ -174,19 +140,29 @@ int rx_callback(airspy_transfer_t* transfer) {
 
 
 static void *wsprDecoder(void *arg) {
+
+    static uint32_t polyphase=0;
+
+    /* CIC comb filter buffers */    
+    static int64_t  Itz[N],Qtz[N];
+
+    /* FIR compensation filter buffers */
+    static float    firI[FIRLEN], firQ[FIRLEN];
+
     /* WSPR decoder use buffers of 45000 samples (hardcoded)
        (120 sec max @ 375sps = 45000 samples)
     */
     static float iSamples[45000]= {0};
     static float qSamples[45000]= {0};
-    static uint32_t samples_len=0;
-    
+    static uint32_t read_len=0,write_len=0;
+
     while (!dec_options.exit_flag) {
+
 	uint32_t len;
 	bool ct;
 
         pthread_mutex_lock(&dec.ready_mutex);
-        while(samples_len>=rx_state.iqIndex && !dec_options.exit_flag)
+        while(read_len>=rx_state.iqIndex && !dec_options.exit_flag)
 		pthread_cond_wait(&dec.ready_cond, &dec.ready_mutex);
 
         if(dec_options.exit_flag) {
@@ -194,25 +170,64 @@ static void *wsprDecoder(void *arg) {
 		pthread_exit(NULL);
 	}
 
-	len=rx_state.iqIndex-samples_len;
+	len=rx_state.iqIndex-read_len;
         ct = rx_state.decode_flag ;
         pthread_mutex_unlock(&dec.ready_mutex);
 
         //printf("1:wsprdecode %d %d\n",len, ct);
 
         if (len) {
-        	/* make a local copy */
-        	memcpy(&(iSamples[samples_len]), &(rx_state.iSamples[samples_len]), len * sizeof(float));
-        	memcpy(&(qSamples[samples_len]), &(rx_state.qSamples[samples_len]), len * sizeof(float));
-        	samples_len += len;  
+    	 for(int32_t i=0; i<len; i++) {
+		uint32_t j,k,st;
+   		float Isum,Qsum;
+        	int64_t Iy,Ity,Qy,Qty;
+		int64_t Iin, Qin;
+
+		Iin=rx_state.iSamples[read_len+i];
+		Qin=rx_state.qSamples[read_len+i];
+
+        	/* CIC Comb stages */
+       		Iy  = Iin - Itz[0]; Itz[0] = Iin; Ity=Iy;
+       		Qy  = Qin - Qtz[0]; Qtz[0] = Qin; Qty=Qy;
+		for(st=1;st<N;st++)  {
+        		Iy  = Ity - Itz[st]; Itz[st] = Ity; Ity = Iy;
+        		Qy  = Qty - Qtz[st]; Qtz[st] = Qty; Qty = Qy;
+		}
+
+        	/* FIR compensation filter  + polphase 5/3 downsampler */
+        	for (j=0; j<FIRLEN-1; j++) {
+                	firI[j] = firI[j+1];
+                	firQ[j] = firQ[j+1];
+		}
+       		firI[FIRLEN-1] = (float)Iy;
+       		firQ[FIRLEN-1] = (float)Qy;
+
+		/* 5/3 downsampling */
+		polyphase+=3;
+		if(polyphase<5) continue ;
+		polyphase-=5;
+
+        	Isum=Qsum=0.0;
+        	for (j=0, k=polyphase; k<91; j++,k+=3) {
+            		Isum += firI[j]*zCoef[k];
+            		Qsum += firQ[j]*zCoef[k];
+        	}
+
+        	/* Save the result in the buffer */
+        	iSamples[write_len]=Isum;
+        	qSamples[write_len]=Qsum;
+		write_len++;
+	 }
 	}
+	read_len+=len;
+
         if (!ct) continue;
 
-        //printf("2:wsprdecode %d\n",ct);
+        printf("2:wsprdecode %d %d\n",read_len,write_len);
 
         /* Search & decode the signal */
-        wspr_decode(iSamples, qSamples, samples_len);
-	samples_len=0;
+        wspr_decode(iSamples, qSamples, write_len);
+	read_len=write_len=0;
 
         pthread_mutex_lock(&dec.ready_mutex);
         while(rx_state.decode_flag == true && !dec_options.exit_flag)
@@ -357,8 +372,8 @@ int main(int argc, char** argv) {
     initDecoder_options();
 
     /* RX buffer allocation */
-    rx_state.iSamples=malloc(sizeof(float)*SIGNAL_LENGHT*SIGNAL_SAMPLE_RATE);
-    rx_state.qSamples=malloc(sizeof(float)*SIGNAL_LENGHT*SIGNAL_SAMPLE_RATE);
+    rx_state.iSamples=malloc(sizeof(int64_t)*SIGNAL_LENGHT*SIGNAL_SAMPLE_RATE);
+    rx_state.qSamples=malloc(sizeof(int64_t)*SIGNAL_LENGHT*SIGNAL_SAMPLE_RATE);
 
     /* Stop condition setup */
     dec_options.exit_flag   = false;
@@ -568,19 +583,19 @@ int main(int argc, char** argv) {
         /* Wait for time Sync on 2 mins */
 	clock_gettime(CLOCK_REALTIME, &tp);
         usec  = tp.tv_sec * 1000000 + tp.tv_nsec/1000;
-        uwait = 119000000 - usec % 120000000 ;
-
-        /* Use the Store the date at the begin of the frame */
-        rawtime=(usec+uwait+1500000)/1000000;
-	gtm = gmtime(&rawtime);
-        sprintf(dec_options.date,"%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
-        sprintf(dec_options.uttime,"%02d%02d", gtm->tm_hour, gtm->tm_min);
+        uwait = 118000000 - usec % 120000000 ;
 
         usleep(uwait);
         //printf("SYNC! RX started\n");
 
         /* Start to store the samples */
         initSampleStorage();
+
+        /* Use the Store the date at the begin of the frame */
+        rawtime=time(NULL)+2;
+	gtm = gmtime(&rawtime);
+        sprintf(dec_options.date,"%02d%02d%02d", gtm->tm_year - 100, gtm->tm_mon + 1, gtm->tm_mday);
+        sprintf(dec_options.uttime,"%02d%02d", gtm->tm_hour, gtm->tm_min);
 
         usleep(100000000);
     }
