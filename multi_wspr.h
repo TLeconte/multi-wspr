@@ -28,25 +28,11 @@
 
 #pragma once
 
-
-#include <unistd.h>
-#include <stdbool.h>
-
-struct receiver_state {
-    bool decode_flag;
-
-    /* Buffer used for sampling */
-    int64_t *iSamples;
-    int64_t *qSamples;
-
-    /* Simple index */
-    uint32_t iqIndex;
-};
-
+#define AIRSPY_SAMPLE_RATE 20000000
 
 /* Option & config of the receiver */
 struct receiver_options {
-    uint32_t dialfreq;
+    uint32_t fset;
     uint32_t realfreq;
     uint32_t linearitygain;
     uint32_t bias;
@@ -55,5 +41,4 @@ struct receiver_options {
     int32_t  upconverter;
     uint32_t rate;
     uint64_t serialnumber;
-    uint64_t readserialno;
 };

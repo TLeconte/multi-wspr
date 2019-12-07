@@ -53,6 +53,10 @@ void postSpot(char *date, char *uttime, double freq, float sync, float snr, floa
   spot->loc=strdup(loc);
   spot->pwr=strdup(pwr);
 
+  printf("%s %+3.2f %+4.2f %10.6f %2d  %-s\n",
+               spot->uttime,spot->snr,spot->dt,spot->freq,(int)spot->drift,spot->message);
+  fflush(stdout);
+
   /* put in list at tail */
   pthread_mutex_lock(&spot_mutex);
   if(spot_tail) 
@@ -65,11 +69,19 @@ void postSpot(char *date, char *uttime, double freq, float sync, float snr, floa
 
 }
 
+void postNospot(char *date, char *uttime, double freq, char *call, char *loc, char *pwr)
+{
+
+  printf("%s %10.6f NoSpot\n",uttime,freq);
+  fflush(stdout);
+
+}
+
 
 static void *sendSpots(void * args) {
     CURL *curl;
     CURLcode res;
-    char url[1024];
+    char url[2048];
     spot_t *spot;
 
 
@@ -77,25 +89,23 @@ static void *sendSpots(void * args) {
    while(!dec_options.exit_flag) {
     pthread_mutex_lock(&spot_mutex);
     while (spot_head == NULL)  {
-        if(dec_options.exit_flag) return 0;
+        if(dec_options.exit_flag) {
+    		pthread_mutex_unlock(&spot_mutex);
+		return 0;
+	}
 	if(curl) { 
     		curl_easy_cleanup(curl); curl=NULL;
 	}
 	pthread_cond_wait(&spot_cond, &spot_mutex);
     }
 
-
     spot=spot_head;
     spot_head=spot_head->next;
     if(spot_head == NULL) spot_tail=NULL;
-
     pthread_mutex_unlock(&spot_mutex);
 
-    printf("%s %3.2f %4.2f %10.6f %2d  %-s\n",
-               spot->uttime,spot->snr,spot->dt,spot->freq,(int)spot->drift,spot->message);
-
     url[0]=0;
-    if(dec_options.rcall[0] && dec_options.rloc[0])
+    if(dec_options.rcall[0] && dec_options.rloc[0] && spot->message)
 	sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.1_wsprd&mode=2",
                 dec_options.rcall, dec_options.rloc, spot->freq, spot->date, spot->uttime,
                 spot->snr, spot->dt, spot->freq,
@@ -118,21 +128,26 @@ static void *sendSpots(void * args) {
 	   		break;
     		}
         	curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-        	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20);
-      }
+        	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30);
+        }
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    res = curl_easy_perform(curl);
-    if(res != CURLE_OK) {
-        fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
-    	curl_easy_cleanup(curl); curl=NULL;
-	usleep(500000);
-    }
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        res = curl_easy_perform(curl);
+        if(res != CURLE_OK) {
+        	fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
+    		curl_easy_cleanup(curl); curl=NULL;
+		if(res == CURLE_OPERATION_TIMEDOUT) 
+			usleep(5000000);
+		else
+			usleep(20000000);
+    	}
     } while (res != CURLE_OK);
 
    }
    return 0;
 }
+
+
 
 void initWsprNet(void)
 {

@@ -1,13 +1,8 @@
-# airspy-wsprd -- WSPR daemon for AirSpy receivers
+# multi_wspr -- multi frequencies WSPR daemon for AirSpy receivers
+
 
 This is a modified version of https://github.com/Guenael/airspy-wsprd : a non-interactive application that allows automatic reporting of WSPR spots on WSPRnet.  
 
-List of mods :
-- Use linearity gain instead of Lna/mixer/vga gains
-- Increase order of cic filter to 4
-- Use a polyphase FIR filter for cic correction in order to have integer downsampling factor
-- Limit input sampling rate to 2.5Ms/s (to ease polyphase filer implementation)
-- Combine Fs/4 mixer with 1st cic filter integrator
-- Load/save hashtable only once and don't load/save fftwisdom data.
-- Add a dedicated thread to send spots to wsprnet.org
+WORK IN PROGRESS !!!
+
  

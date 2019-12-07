@@ -55,7 +55,7 @@ void subtract_signal(float *id, float *qd, long np,
                      float f0, int32_t shift0, float drift0, uint8_t* channel_symbols);
 void subtract_signal2(float *id, float *qd, long np,
                       float f0, int32_t shift0, float drift0, uint8_t* channel_symbols);
-int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints);
+int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr);
 
 void loadHashtable(void);
 void saveHashtable(void);
