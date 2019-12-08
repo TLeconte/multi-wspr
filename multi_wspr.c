@@ -69,7 +69,7 @@ struct sigbuff_s {
 
 typedef struct {
 	bool decode_flag;
-	uint32_t fr;
+	uint32_t nc,fr;
 
     	float *iosc,*qosc;
     	uint32_t ndi;
@@ -273,7 +273,7 @@ static void *wsprDecoder(void *arg) {
         //printf("2:wsprdecode %d \n",chann->write_len);
 
         /* Search & decode the signal */
-        wspr_decode(chann->iSamples, chann->qSamples, chann->write_len, chann->fr);
+        wspr_decode(chann->iSamples, chann->qSamples, chann->write_len, chann->fr, chann->nc);
 	chann->write_len=0;
 
         //printf("3:wsprdecode done \n");
@@ -365,14 +365,6 @@ void initSampleStorage() {
  }
 }
 
-/* Default options for the decoder */
-void initDecoder_options() {
-    dec_options.usehashtable = 1;
-    dec_options.npasses = 2;
-    dec_options.subtraction = 1;
-    dec_options.quickmode = 0;
-}
-
 
 /* Default options for the receiver */
 void initrx_options() {
@@ -429,7 +421,6 @@ int main(int argc, char** argv) {
     bool fst = true ; 
 
     initrx_options();
-    initDecoder_options();
 
     /* Stop condition setup */
     dec_options.exit_flag   = false;
@@ -437,7 +428,7 @@ int main(int argc, char** argv) {
     if (argc <= 1)
         usage();
 
-    while ((opt = getopt(argc, argv, "f:c:g:r:l:b:s:p:u:k:H:Q:S")) != -1) {
+    while ((opt = getopt(argc, argv, "f:c:g:r:l:b:s:p:u:k:")) != -1) {
         switch (opt) {
         case 'c': // Callsign
             sprintf(dec_options.rcall, "%.12s", optarg);
@@ -471,17 +462,6 @@ int main(int argc, char** argv) {
             rx_options.packing = (uint32_t)atoi(optarg);
             if (rx_options.packing <= 0) rx_options.packing = 0;
             if (rx_options.packing >= 1) rx_options.packing = 1;
-            break;
-        case 'H': // Decoder option, use a hastable
-            dec_options.usehashtable = 0;
-            break;
-        case 'Q': // Decoder option, faster
-            dec_options.quickmode = 1;
-            break;
-        case 'S': // Decoder option, single pass mode (same as original wsprd)
-            dec_options.subtraction = 0;
-            dec_options.npasses = 1;
-            break;
         default:
             usage();
             break;
@@ -501,6 +481,7 @@ int main(int argc, char** argv) {
 
     /* init channels data */
     for(n=0;n<wsprfrsets[rx_options.fset].nbfr;n++) {
+	channels[n].nc =n;
 	channels[n].decode_flag = true;
 	channels[n].fr = wsprfrsets[rx_options.fset].fr[n];
 
@@ -526,8 +507,7 @@ int main(int argc, char** argv) {
     signal(SIGFPE, &sigint_callback_handler);
     signal(SIGTERM, &sigint_callback_handler);
 
-    if(dec_options.usehashtable)
-	loadHashtable();
+    loadHashtable();
 
     /* Print used parameter */
     time_t rawtime;
@@ -543,6 +523,7 @@ int main(int argc, char** argv) {
     printf("  Bits packing : %s\n", rx_options.packing ? "yes" : "no");
 
     initWsprNet();
+    initwsprd(wsprfrsets[rx_options.fset].nbfr);
 
     if(startairspy()) {
         	printf("Could not start airspy\n");
@@ -581,8 +562,7 @@ int main(int argc, char** argv) {
 
     stopairspy();
 
-    if(dec_options.usehashtable)
-	saveHashtable();
+    saveHashtable();
 
     printf("Bye!\n");
 

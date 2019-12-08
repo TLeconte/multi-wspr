@@ -40,23 +40,12 @@ struct decoder_options {
     char     rloc[7];      // Locator of the RX station
     char     date[7];      // Date & time of the processes samples
     char     uttime[5];    //  ''
-    uint32_t quickmode;    // Decoder option & tweak
-    uint32_t usehashtable; //  ''
-    uint32_t npasses;      //  ''
-    uint32_t subtraction;  //  ''
 };
 extern struct decoder_options  dec_options;
 
-void sync_and_demodulate(float *id, float *qd, long np,
-                         uint8_t *symbols, float *f1, float fstep,
-                         int32_t *shift1, int32_t lagmin, int32_t lagmax, int32_t lagstep,
-                         float *drift1, int32_t symfac, float *sync, int32_t mode);
-void subtract_signal(float *id, float *qd, long np,
-                     float f0, int32_t shift0, float drift0, uint8_t* channel_symbols);
-void subtract_signal2(float *id, float *qd, long np,
-                      float f0, int32_t shift0, float drift0, uint8_t* channel_symbols);
-int32_t wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr);
+extern void wspr_decode(float *idat, float *qdat, uint32_t npoints, uint32_t fr, uint32_t chn);
+extern void initwsprd(uint32_t nbc);
 
-void loadHashtable(void);
-void saveHashtable(void);
+extern void loadHashtable(void);
+extern void saveHashtable(void);
 

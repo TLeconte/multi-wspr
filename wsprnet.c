@@ -15,11 +15,9 @@ struct spot_s {
 	char *date;
 	char *uttime;
 	double freq;
-	float sync;
 	float snr;
 	float dt;
 	float drift;
-	int32_t jitter;
 	char *message;
 	char *call;
 	char *loc;
@@ -33,7 +31,7 @@ static pthread_mutex_t  spot_mutex;
 static pthread_t  spot_thread;
 
 
-void postSpot(char *date, char *uttime, double freq, float sync, float snr, float dt, float drift, int32_t jitter,char *message, char *call, char *loc, char *pwr)
+void postSpot(char *date, char *uttime, double freq, float snr, float dt, float drift ,char *call, char *loc, char *pwr)
 {
   spot_t *spot;
 
@@ -43,18 +41,15 @@ void postSpot(char *date, char *uttime, double freq, float sync, float snr, floa
   spot->date=strdup(date);
   spot->uttime=strdup(uttime);
   spot->freq=freq;
-  spot->sync=sync;
   spot->snr=snr;
   spot->dt=dt;
   spot->drift=drift;
-  spot->jitter=jitter;
-  spot->message=strdup(message);
   spot->call=strdup(call);
   spot->loc=strdup(loc);
   spot->pwr=strdup(pwr);
 
-  printf("%s %+3.2f %+4.2f %10.6f %2d  %-s\n",
-               spot->uttime,spot->snr,spot->dt,spot->freq,(int)spot->drift,spot->message);
+  printf("%s %+3.2f %+4.2f %10.6f %2d  %s %s %s\n",
+               spot->uttime,spot->snr,spot->dt,spot->freq,(int)spot->drift,spot->call,spot->loc,spot->pwr);
   fflush(stdout);
 
   /* put in list at tail */
@@ -69,12 +64,10 @@ void postSpot(char *date, char *uttime, double freq, float sync, float snr, floa
 
 }
 
-void postNospot(char *date, char *uttime, double freq, char *call, char *loc, char *pwr)
+void postNospot(char *date, char *uttime, double freq)
 {
-
   printf("%s %10.6f NoSpot\n",uttime,freq);
   fflush(stdout);
-
 }
 
 
@@ -113,7 +106,6 @@ static void *sendSpots(void * args) {
 
     free(spot->date);
     free(spot->uttime);
-    free(spot->message);
     free(spot->call);
     free(spot->loc);
     free(spot->pwr);

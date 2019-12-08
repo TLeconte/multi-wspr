@@ -89,6 +89,7 @@ int startairspy(void)
         airspy_exit();
         return EXIT_FAILURE;
     }
+    return 0;
 }
 
 void stopairspy(void) 
