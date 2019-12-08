@@ -10,6 +10,9 @@
  which in turn was based on earlier work by K1JT.
  
  Copyright 2014-2018, Steven Franke, K9AN
+
+ Modified for use in multi_wspr 
+ Copyright 2019, Thierry Leconte, F4DWV
  
  License: GNU GPL v3
  
@@ -47,6 +50,9 @@
 
 #define max(x,y) ((x) > (y) ? (x) : (y))
 
+#ifdef OSDWSPR
+extern void osdwspr_ (float [], unsigned char [], int *, unsigned char [], int *, float *);
+#endif
 
 static const unsigned char pr3[162]=
 {1,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,
@@ -540,7 +546,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     int i,j,k;
     unsigned char *symbols, *decdata, *channel_symbols, *apmask, *cw;
     signed char message[]={-9,13,-35,123,57,-39,64,0,0,0,0};
-    int verbose=0,quickmode=0,more_candidates=1, stackdecoder=0;
+    int verbose=0,more_candidates=1, stackdecoder=0;
     int ipass, nblocksize;
     int maxdrift;
     int shift1, lagmin, lagmax, lagstep, ifmin, ifmax, worth_a_try, not_decoded;
@@ -559,6 +565,12 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     char pwr[4]= {0};
     char callsign[13]= {0};
     char call_loc_pow[23]= {0};
+#ifdef OSDWSPR
+    int ndepth=5;                            //Depth for OSD 
+    int nhardmin,ihash;
+    float dmin;
+    float fsymbs[162];
+#endif
 
     symbols=calloc(nbits*2,sizeof(unsigned char));
     apmask=calloc(162,sizeof(unsigned char));
@@ -872,6 +884,9 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
             float y,sq,rms;
             not_decoded=1;
             int ib=1, blocksize;
+#ifdef OSDWSPR
+            int n1,n2,n3,nadd,nu,ntype;  
+#endif
 
             while( ib <= nblocksize && not_decoded ) {
                 blocksize=ib;
@@ -903,10 +918,47 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                             not_decoded = fano(&metric,&cycles,&maxnp,decdata,symbols,nbits,
                                            mettab,delta,maxcycles);
                         }
-
+#ifdef OSDWSPR
+                        if( (ndepth >= 0) && not_decoded ) { 
+                            for(i=0; i<162; i++) {
+                                fsymbs[i]=symbols[i]-127;
+                            }
+                            osdwspr_(fsymbs,apmask,&ndepth,cw,&nhardmin,&dmin);
+                            for(i=0; i<162; i++) {
+                               symbols[i]=255*cw[i];
+                            }
+                            fano(&metric,&cycles,&maxnp,decdata,symbols,nbits,
+                                               mettab,delta,maxcycles);
+                            for(i=0; i<11; i++) {
+                                if( decdata[i]>127 ) {
+                                    message[i]=decdata[i]-256;
+                                } else {
+                                    message[i]=decdata[i];
+                                }
+                            }
+                            unpack50(message,&n1,&n2);
+                            if( !unpackcall(n1,callsign) ) break;
+                            callsign[12]=0;
+                            ntype = (n2&127) - 64;
+                            if( (ntype >= 0) && (ntype <= 62) ) {
+                                nu = ntype%10;
+                                if( !(nu == 0 || nu == 3 || nu == 7) ) {
+                                   nadd=nu;
+                                   if( nu > 3 ) nadd=nu-3;
+                                   if( nu > 7 ) nadd=nu-7;
+                                   n3=n2/128+32768*(nadd-1);
+                                   if( !unpackpfx(n3,callsign) ) break;
+                                }
+                                ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
+                                if(strncmp(hashtab+ihash*13,callsign,13)==0) {  
+                                   not_decoded=0;
+                                   break;
+                                }
+                            } 
+                        }
+#endif
                     }
                     idt++;
-                    if( quickmode ) break;
                 }
                 ib++;
             } 
