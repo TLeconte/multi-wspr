@@ -1,34 +1,28 @@
 /*
- * FreeBSD License
- * Copyright (c) 2016, Guenael
- * All rights reserved.
- *
- * This file is based on AirSpy project & HackRF project
- *   Copyright 2012 Jared Boone <jared@sharebrained.com>
- *   Copyright 2014-2015 Benjamin Vernoux <bvernoux@airspy.com>
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- */
+ License: GNU GPL v3
 
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+ multi_wspr.c 
+ Copyright (c) 2019, Thierry Leconte, F4DWV
+
+ This file as for origin :
+ github/Guenael/airspy-wsprd/airspy_wsprd.c
+ Copyright (c) 2016, Guenael
+ but has been heavily rewritten
+
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +32,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 #include <libairspy/airspy.h>
 
@@ -201,17 +196,12 @@ int rx_callback(airspy_transfer_t* transfer) {
 static void *wsprDecoder(void *arg) {
     channel_t *chann=arg;
 
-    while (!dec_options.exit_flag) {
+    while (1) {
     	sigbuff_t *sbuff;
 
         pthread_mutex_lock(&(chann->sigbuff_mutex));
-        while(chann->sigbuff_head == NULL && !dec_options.exit_flag)
+        while(chann->sigbuff_head == NULL )
 		pthread_cond_wait(&(chann->sigbuff_cond), &(chann->sigbuff_mutex));
-
-        if(dec_options.exit_flag) {
-        	pthread_mutex_unlock(&(chann->sigbuff_mutex));
-		pthread_exit(NULL);
-	}
 
    	sbuff=chann->sigbuff_head;
         chann->sigbuff_head=chann->sigbuff_head->next;
@@ -278,8 +268,7 @@ static void *wsprDecoder(void *arg) {
 
         //printf("3:wsprdecode done \n");
     }
-    
-    pthread_exit(NULL);
+    return 0;
 }
 
 
@@ -377,53 +366,52 @@ void initrx_options() {
 
 
 void sigint_callback_handler(int signum) {
-    uint32_t n;
 
     fprintf(stdout, "Caught signal %d\n", signum);
-    dec_options.exit_flag = true;
-   
-    for(n=0;n<wsprfrsets[rx_options.fset].nbfr;n++) { 
-    	pthread_cond_broadcast(&(channels[n].sigbuff_cond));
-    }
+
+    saveHashtable();
+
+    stopairspy();
+    exit(0);
 }
 
 
 void usage(void) {
     fprintf(stderr,
-            "airspy_wsprd, a simple WSPR daemon for AirSpy receivers\n\n"
-            "Use:\tairspy_wsprd -f frequency -c callsign -g locator [options]\n"
-            "\t-f frequency set.\n"
+            "multi_wspr, a Multi-simultaneous frequency WSPR receiver for AirSpy sdr\n\n"
+            "Use:\tmulti_wspr -f frequency_set -c callsign -g locator [options]\n\n"
+            "\t-f frequency set :\n"
+	    "\t\t0 : 137.5Khz\n"
+            "\t\t1 : 1.8381Mhz, 3.5701Mhz, 5.3647Mhz, 7.0401Mhz\n"
+            "\t\t2 : 3.5701Mhz, 5.3647Mhz, 7.0401Mhz, 10.1402Mhz\n"
+            "\t\t3 : 7.0401Mhz, 10.1402Mhz, 14.0971Mhz\n"
+            "\t\t4 : 10.1402Mhz, 14.0971Mhz, 18.1061Mhz\n"
+            "\t\t5 : 14.0971Mhz, 18.1061Mhz, 21.0961Mhz\n"
+            "\t\t6 : 18.1061Mhz, 21.0961Mhz, 24.9261Mhz\n"
+            "\t\t7 : 21.0961Mhz, 24.9261Mhz, 28.1261Mhz\n\n"
             "\t-c your callsign (12 chars max)\n"
             "\t-g your locator grid (6 chars max)\n"
-            "Receiver extra options:\n"
+            "\nReceiver extra options:\n"
             "\t-l linearity gain [0-21] (default: 12)\n"
             "\t-b set Bias Tee [0-1], (default: 0 disabled)\n"
-            "\t-r sampling rate [2.5M, 3M, 6M, 10M], (default: 2.5M)\n"
             "\t-p frequency correction (default: 0)\n"
             "\t-u upconverter (default: 0, example: 125M)\n"
-            "\t-s S/N: Open device with specified 64bits serial number\n"
             "\t-k packing: Set packing for samples, \n"
             "\t   1=enabled(12bits packed), 0=disabled(default 16bits not packed)\n"
-            "Decoder extra options:\n"
-            "\t-H do not use (or update) the hash table\n"
-            "\t-Q quick mode, doesn't dig deep for weak signals\n"
-            "\t-S single pass mode, no subtraction (same as original wsprd)\n"
             "Example:\n"
-            "\tairspy_wsprd -f 144.489M -r 2.5M -c A1XYZ -g AB12cd -l 10 -m 7 -v 7\n");
+            "\tmulti_wspr -f 1 -u 120M -c F4DWV -g IN98bc -l 18 \n");
     exit(1);
 }
 
 
 int main(int argc, char** argv) {
     uint32_t opt;
-    uint32_t exit_code = EXIT_SUCCESS;
     uint32_t n;
     bool fst = true ; 
 
     initrx_options();
 
     /* Stop condition setup */
-    dec_options.exit_flag   = false;
 
     if (argc <= 1)
         usage();
@@ -439,7 +427,7 @@ int main(int argc, char** argv) {
         case 'f': // freq set
             rx_options.fset = (uint32_t)atoi(optarg);
             break;
-        case 'l': // LNA gain
+        case 'l': // linearity gain
             rx_options.linearitygain = (uint32_t)atoi(optarg);
             if (rx_options.linearitygain < 0) rx_options.linearitygain = 0;
             if (rx_options.linearitygain > 21 ) rx_options.linearitygain = 21;
@@ -476,7 +464,13 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Please specify your locator.\n");
     }
 
-    /* Calcule decimation rate & frequency offset for fs/4 shift */
+    if(rx_options.fset >= NBFRSET || rx_options.fset < 0 )  {
+       	    fprintf(stderr, "Invalid  frequency set.\n\n");
+            usage();
+	    exit(1);
+    }
+
+    /* Compute decimation rate & frequency offset for fs/4 shift */
     rx_options.realfreq =  wsprfrsets[rx_options.fset].centerfr + rx_options.shift + rx_options.upconverter;
 
     /* init channels data */
@@ -531,7 +525,7 @@ int main(int argc, char** argv) {
     }
 
     /* Main loop : Wait, read, decode */
-    while (!dec_options.exit_flag) {
+    while (1) {
 	int64_t usec,uwait;
 	struct timespec tp;
 
@@ -560,15 +554,5 @@ int main(int argc, char** argv) {
         usleep(100000000);
     }
 
-    stopairspy();
-
-    saveHashtable();
-
-    printf("Bye!\n");
-
-    stopWrprNet();
-
-    pthread_exit(NULL);
-
-    return exit_code;
+    return 0;
 }

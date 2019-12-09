@@ -506,6 +506,7 @@ static const int npasses=2;
 static const int delta=60;                            //Fano threshold step
 static const float bias=0.45;                        //Fano metric bias (used for both Fano and stack algorithms)
 static const float frmin=-150, frmax=150;
+static const int verbose=0,more_candidates=1, stackdecoder=0;
 
 static int mettab[2][256];
 
@@ -546,7 +547,6 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     int i,j,k;
     unsigned char *symbols, *decdata, *channel_symbols, *apmask, *cw;
     signed char message[]={-9,13,-35,123,57,-39,64,0,0,0,0};
-    int verbose=0,more_candidates=1, stackdecoder=0;
     int ipass, nblocksize;
     int maxdrift;
     int shift1, lagmin, lagmax, lagstep, ifmin, ifmax, worth_a_try, not_decoded;

@@ -79,13 +79,9 @@ static void *sendSpots(void * args) {
 
 
    curl=NULL;
-   while(!dec_options.exit_flag) {
+   while(1) {
     pthread_mutex_lock(&spot_mutex);
     while (spot_head == NULL)  {
-        if(dec_options.exit_flag) {
-    		pthread_mutex_unlock(&spot_mutex);
-		return 0;
-	}
 	if(curl) { 
     		curl_easy_cleanup(curl); curl=NULL;
 	}

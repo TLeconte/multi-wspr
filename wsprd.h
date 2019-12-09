@@ -30,11 +30,8 @@
 
 #pragma once
 
-#include <stdbool.h>
-
 /* Option & config of decoder (Shared with the wsprd code) */
 struct decoder_options {
-    bool     exit_flag;
     uint32_t freq;         // Dial frequency
     char     rcall[13];    // Callsign of the RX station
     char     rloc[7];      // Locator of the RX station
