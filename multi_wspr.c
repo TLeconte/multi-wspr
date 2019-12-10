@@ -395,7 +395,7 @@ void usage(void) {
             "\t-l linearity gain [0-21] (default: 12)\n"
             "\t-b set Bias Tee [0-1], (default: 0 disabled)\n"
             "\t-p frequency correction (default: 0)\n"
-            "\t-u upconverter (default: 0, example: 125M)\n"
+            "\t-u upconverter (default: 0, example: SpyVerter : 120M)\n"
             "\t-k packing: Set packing for samples, \n"
             "\t   1=enabled(12bits packed), 0=disabled(default 16bits not packed)\n"
             "Example:\n"
