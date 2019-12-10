@@ -1,23 +1,3 @@
-*
- License: GNU GPL v3
-
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
- wsprnet.c
- Copyright (c) 2019, Thierry Leconte, F4DWV
-
-*/
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -115,7 +95,7 @@ static void *sendSpots(void * args) {
 
     url[0]=0;
     if(dec_options.rcall[0] && dec_options.rloc[0] && spot->message)
-	sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=0.1_wsprd&mode=2",
+	sprintf(url,"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=1.0_multi_wspr&mode=2",
                 dec_options.rcall, dec_options.rloc, spot->freq, spot->date, spot->uttime,
                 spot->snr, spot->dt, spot->freq,
                 spot->call, spot->loc, spot->pwr);
