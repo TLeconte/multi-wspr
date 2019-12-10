@@ -29,6 +29,7 @@ Receiver extra options:
   -u upconverter (default: 0, example: 120M for SpyVerter)
   -k packing: Set packing for samples, 
 	   1=enabled(12bits packed), 0=disabled(default 16bits not packed)
+
 ## Example
 
 > multi_wspr -f 1 -u 120M -b 1 -c F4DWV -g IN98bc -l 18 
