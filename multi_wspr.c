@@ -366,12 +366,16 @@ void initrx_options() {
 
 
 void sigint_callback_handler(int signum) {
+    uint32_t n;
 
     fprintf(stdout, "Caught signal %d\n", signum);
 
-    saveHashtable();
-
     stopairspy();
+
+    for(n=0;n<wsprfrsets[rx_options.fset].nbfr;n++) {
+    	saveHashtable(n,channels[n].fr);
+    }
+
     exit(0);
 }
 
@@ -479,6 +483,8 @@ int main(int argc, char** argv) {
 	channels[n].decode_flag = true;
 	channels[n].fr = wsprfrsets[rx_options.fset].fr[n];
 
+    	loadHashtable(n,channels[n].fr);
+
     	channels[n].mixerphase=0;
 
     	channels[n].Ix=0;
@@ -501,7 +507,6 @@ int main(int argc, char** argv) {
     signal(SIGFPE, &sigint_callback_handler);
     signal(SIGTERM, &sigint_callback_handler);
 
-    loadHashtable();
 
     /* Print used parameter */
     time_t rawtime;

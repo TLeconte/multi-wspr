@@ -467,29 +467,42 @@ static void subtract_signal(float *id, float *qd, long np,
     return;
 }
 
-static    char hashtab[32768*13]= {0};
-void loadHashtable(void)
+typedef struct {
+  fftwf_complex *fftin, *fftout;
+  fftwf_plan PLAN;
+  char hashtab[32768*13];
+} chndata_t;
+static chndata_t chndata[4];
+
+void loadHashtable(uint32_t n, uint32_t fr)
 {
         FILE *fhash;
         char line[80], hcall[12];
+        char filename[256];
 
-        if( (fhash=fopen("hashtable.txt","r")) ) {
+	memset(chndata[n].hashtab,0,32768*13);
+
+	sprintf(filename,"hash_%d.txt",fr/1000);
+        if( (fhash=fopen(filename,"r")) ) {
             while (fgets(line, sizeof(line), fhash) != NULL) {
     		int32_t nh;
                 sscanf(line,"%d %s",&nh,hcall);
-                strcpy(hashtab+nh*13,hcall);
+                strcpy(chndata[n].hashtab+nh*13,hcall);
             }
             fclose(fhash);
         }
 }
 
-void saveHashtable(void) 
+void saveHashtable(uint32_t n, uint32_t fr) 
 {
 	FILE *fhash;
-        fhash=fopen("hashtable.txt","w");
+        char filename[256];
+
+	sprintf(filename,"hash_%d.txt",fr/1000);
+        fhash=fopen(filename,"w");
         for (uint32_t i=0; i<32768; i++) {
-            if( strncmp(hashtab+i*13,"\0",1) != 0 ) {
-                fprintf(fhash,"%5d %s\n",i,hashtab+i*13);
+            if( strncmp(chndata[n].hashtab+i*13,"\0",1) != 0 ) {
+                fprintf(fhash,"%5d %s\n",i,chndata[n].hashtab+i*13);
             }
         }
         fclose(fhash);
@@ -510,12 +523,6 @@ static const int verbose=0,more_candidates=1, stackdecoder=0;
 
 static int mettab[2][256];
 
-typedef struct {
-  fftwf_complex *fftin, *fftout;
-  fftwf_plan PLAN;
-} fftdata_t;
-static fftdata_t fftdata[4];
-
 //***************************************************************************
 void initwsprd(uint32_t nbc)
 {
@@ -529,12 +536,12 @@ void initwsprd(uint32_t nbc)
 
     for(n=0;n<nbc;n++) {
 
-     fftdata[n].fftin=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
-     fftdata[n].fftout=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
+     chndata[n].fftin=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
+     chndata[n].fftout=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
 
      // Possible options: FFTW_ESTIMATE, FFTW_ESTIMATE_PATIENT,
      // FFTW_MEASURE, FFTW_PATIENT, FFTW_EXHAUSTIVE
-     fftdata[n].PLAN = fftwf_plan_dft_1d(512, fftdata[n].fftin, fftdata[n].fftout, FFTW_FORWARD, FFTW_EXHAUSTIVE);
+     chndata[n].PLAN = fftwf_plan_dft_1d(512, chndata[n].fftin, chndata[n].fftout, FFTW_FORWARD, FFTW_EXHAUSTIVE);
   }
 }
     
@@ -625,15 +632,15 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
         for (i=0; i<nffts; i++) {
             for(j=0; j<512; j++ ) {
                 k=i*128+j;
-                fftdata[chn].fftin[j][0]=idat[k] * w[j];
-                fftdata[chn].fftin[j][1]=qdat[k] * w[j];
+                chndata[chn].fftin[j][0]=idat[k] * w[j];
+                chndata[chn].fftin[j][1]=qdat[k] * w[j];
             }
-            fftwf_execute(fftdata[chn].PLAN);
+            fftwf_execute(chndata[chn].PLAN);
             for (j=0; j<512; j++ ) {
                 k=j+256;
                 if( k>511 )
                     k=k-512;
-                ps[j][i]=fftdata[chn].fftout[k][0]*fftdata[chn].fftout[k][0]+fftdata[chn].fftout[k][1]*fftdata[chn].fftout[k][1];
+                ps[j][i]=chndata[chn].fftout[k][0]*chndata[chn].fftout[k][0]+chndata[chn].fftout[k][1]*chndata[chn].fftout[k][1];
             }
         }
         
@@ -979,11 +986,11 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                 // Unpack the decoded message, update the hashtable, apply
                 // sanity checks on grid and power, and return
                 // call_loc_pow string and also callsign (for de-duping).
-                noprint=unpk_(message,hashtab,call_loc_pow,callsign,loc,pwr);
+                noprint=unpk_(message,chndata[chn].hashtab,call_loc_pow,callsign,loc,pwr);
 
                 // subtract even on last pass
                 if( subtraction && (ipass < npasses ) && !noprint ) {
-                    if( get_wspr_channel_symbols(call_loc_pow, hashtab, channel_symbols) ) {
+                    if( get_wspr_channel_symbols(call_loc_pow, chndata[chn].hashtab, channel_symbols) ) {
                         subtract_signal(idat, qdat, npoints, f1, shift1, drift1, channel_symbols);
                     } else {
                         break;

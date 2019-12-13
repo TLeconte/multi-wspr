@@ -43,6 +43,6 @@ extern struct decoder_options  dec_options;
 extern void wspr_decode(float *idat, float *qdat, uint32_t npoints, uint32_t fr, uint32_t chn);
 extern void initwsprd(uint32_t nbc);
 
-extern void loadHashtable(void);
-extern void saveHashtable(void);
+extern void loadHashtable(uint32_t n , uint32_t fr);
+extern void saveHashtable(uint32_t n , uint32_t fr);
 
