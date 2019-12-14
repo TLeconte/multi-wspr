@@ -37,6 +37,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <fftw3.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "fano.h"
 #include "jelinek.h"
@@ -479,18 +481,23 @@ void loadHashtable(uint32_t n, uint32_t fr)
         FILE *fhash;
         char line[80], hcall[12];
         char filename[256];
+	struct stat statbuf;
 
 	memset(chndata[n].hashtab,0,32768*13);
 
 	sprintf(filename,"hash_%d.txt",fr/1000);
-        if( (fhash=fopen(filename,"r")) ) {
-            while (fgets(line, sizeof(line), fhash) != NULL) {
-    		int32_t nh;
+        if(stat(filename, &statbuf)) return;
+
+	if((statbuf.st_mtime+6*3600)<time(NULL)) return ;
+	
+        if((fhash=fopen(filename,"r"))==NULL) return ;
+
+        while (fgets(line, sizeof(line), fhash) != NULL) {
+  		int32_t nh;
                 sscanf(line,"%d %s",&nh,hcall);
                 strcpy(chndata[n].hashtab+nh*13,hcall);
-            }
-            fclose(fhash);
         }
+        fclose(fhash);
 }
 
 void saveHashtable(uint32_t n, uint32_t fr) 
