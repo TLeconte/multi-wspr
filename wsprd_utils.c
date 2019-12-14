@@ -98,13 +98,13 @@ int unpackcall( int32_t ncall, char *call )
         tmp[6]='\0';
         // remove leading whitespace
         for(i=0; i<5; i++) {
-            if( tmp[i] != c[36] )
+            if( tmp[i] != ' ' )
                 break;
         }
         sprintf(call,"%-6s",&tmp[i]);
         // remove trailing whitespace
         for(i=0; i<6; i++) {
-            if( call[i] == c[36] ) {
+            if( call[i] == ' ' ) {
                 call[i]='\0';
             }
         }
@@ -140,6 +140,7 @@ int unpackgrid( int32_t ngrid, char *grid)
         n2 = (nlat-240*n1)/24;
         grid[1]=c[10+n1];
         grid[3]=c[n2];
+	grid[4]='\0';
     } else {
         strcpy(grid,"XXXX");
         return 0;
@@ -240,28 +241,26 @@ int floatcomp(const void* elem1, const void* elem2)
     return *(const float*)elem1 > *(const float*)elem2;
 }
 
-int unpk_(signed char *message, char *hashtab, char *call_loc_pow, char *callsign, char *loc, char *pwr)
+int unpk_(signed char *message, char *hashtab, char *callsign, char *call_loc_pow, char *call, char *loc, char *pwr)
 {
     int n1,n2,n3,ndbm,ihash,nadd,noprint=0;
     char grid[5],grid6[7],cdbm[3];
-    
+
     unpack50(message,&n1,&n2);
     if( !unpackcall(n1,callsign) ) return 1;
     if( !unpackgrid(n2, grid) ) return 1;
     int ntype = (n2&127) - 64;
-    callsign[12]=0;
-    grid[4]=0;
 
     /*
      Based on the value of ntype, decide whether this is a Type 1, 2, or
      3 message.
-     
+
      * Type 1: 6 digit call, grid, power - ntype is positive and is a member
      of the set {0,3,7,10,13,17,20...60}
-     
+
      * Type 2: extended callsign, power - ntype is positive but not
      a member of the set of allowed powers
-     
+
      * Type 3: hash, 6 digit grid, power - ntype is negative.
      */
 
@@ -279,8 +278,17 @@ int unpk_(signed char *message, char *hashtab, char *call_loc_pow, char *callsig
             strncat(call_loc_pow,"\0",1);
             ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
             strcpy(hashtab+ihash*13,callsign);
-	    strcpy(pwr,cdbm);
-	    strcpy(loc,grid);
+
+            memset(call,0,strlen(callsign)+1);
+            memset(loc,0,strlen(grid)+1);
+            memset(pwr,0,2+1);
+            strncat(call,callsign,strlen(callsign));
+            strncat(call,"\0",1);
+            strncat(loc,grid,strlen(grid));
+            strncat(loc,"\0",1);
+            strncat(pwr,cdbm,2);
+            strncat(pwr,"\0",1);
+
         } else {
             nadd=nu;
             if( nu > 3 ) nadd=nu-3;
@@ -294,38 +302,44 @@ int unpk_(signed char *message, char *hashtab, char *call_loc_pow, char *callsig
             strncat(call_loc_pow," ",1);
             strncat(call_loc_pow,cdbm,2);
             strncat(call_loc_pow,"\0",1);
-	    strcpy(pwr,cdbm);
-	    loc[0]='\0';
             int nu=ndbm%10;
             if( nu == 0 || nu == 3 || nu == 7 || nu == 10 ) { //make sure power is OK
                 ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
                 strcpy(hashtab+ihash*13,callsign);
             } else noprint=1;
+
+            memset(call,0,strlen(callsign)+1);
+            memset(loc,0,1);
+            memset(pwr,0,2+1);
+            strncat(call,callsign,strlen(callsign));
+            strncat(call,"\0",1);
+            strncat(loc,"\0",1);
+            strncat(pwr,cdbm,2);
+            strncat(pwr,"\0",1);
         }
     } else if ( ntype < 0 ) {
         ndbm=-(ntype+1);
         memset(grid6,0,sizeof(char)*7);
-//        size_t len=strlen(callsign);
-        size_t len=6;
-        strncat(grid6,callsign+len-1,1);
-        strncat(grid6,callsign,len-1);
+        strncat(grid6,callsign+5,1);
+        strncat(grid6,callsign,5);
         int nu=ndbm%10;
-       if ((nu != 0 && nu != 3 && nu != 7 && nu != 10) ||
-            !isalpha(grid6[0]) || !isalpha(grid6[1]) ||
-            !isdigit(grid6[2]) || !isdigit(grid6[3])) {
-               // not testing 4'th and 5'th chars because of this case: <PA0SKT/2> JO33 40
-               // grid is only 4 chars even though this is a hashed callsign...
-               //         isalpha(grid6[4]) && isalpha(grid6[5]) ) ) {
-          noprint=1;
-        }
-        
+        if( (nu == 0 || nu == 3 || nu == 7 || nu == 10) &&        \
+                (isalpha(grid6[0]) && isalpha(grid6[1]) &&    \
+                 isdigit(grid6[2]) && isdigit(grid6[3]) ) ) {
+            // not testing 4'th and 5'th chars because of this case: <PA0SKT/2> JO33 40
+            // grid is only 4 chars even though this is a hashed callsign...
+            //         isalpha(grid6[4]) && isalpha(grid6[5]) ) ) {
+            ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
+            strcpy(hashtab+ihash*13,callsign);
+        } else noprint=1;
+
         ihash=(n2-ntype-64)/128;
         if( strncmp(hashtab+ihash*13,"\0",1) != 0 ) {
             sprintf(callsign,"<%s>",hashtab+ihash*13);
         } else {
             sprintf(callsign,"%5s","<...>");
         }
-        
+
         memset(call_loc_pow,0,sizeof(char)*23);
         sprintf(cdbm,"%2d",ndbm);
         strncat(call_loc_pow,callsign,strlen(callsign));
@@ -334,9 +348,17 @@ int unpk_(signed char *message, char *hashtab, char *call_loc_pow, char *callsig
         strncat(call_loc_pow," ",1);
         strncat(call_loc_pow,cdbm,2);
         strncat(call_loc_pow,"\0",1);
- 	strcpy(pwr,cdbm);
-	strcpy(loc,grid6);       
-        
+
+        memset(call,0,strlen(callsign)+1);
+        memset(loc,0,strlen(grid6)+1);
+        memset(pwr,0,2+1);
+        strncat(call,callsign,strlen(callsign));
+        strncat(call,"\0",1);
+        strncat(loc,grid6,strlen(grid6));
+        strncat(loc,"\0",1);
+        strncat(pwr,cdbm,2);
+        strncat(pwr,"\0",1);
+
         // I don't know what to do with these... They show up as "A000AA" grids.
         if( ntype == -64 ) noprint=1;
     }

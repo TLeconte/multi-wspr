@@ -526,7 +526,7 @@ static const int npasses=2;
 static const int delta=60;                            //Fano threshold step
 static const float bias=0.45;                        //Fano metric bias (used for both Fano and stack algorithms)
 static const float frmin=-150, frmax=150;
-static const int verbose=0,more_candidates=1, stackdecoder=0;
+static const int more_candidates=1, stackdecoder=0;
 
 static int mettab[2][256];
 
@@ -575,16 +575,6 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     float dt_print;
     float allfreqs[100];
     char allcalls[100][13];
-    char loc[7]= {0};
-    char pwr[4]= {0};
-    char callsign[13]= {0};
-    char call_loc_pow[23]= {0};
-#ifdef OSDWSPR
-    int ndepth=5;                            //Depth for OSD 
-    int nhardmin,ihash;
-    float dmin;
-    float fsymbs[162];
-#endif
 
     symbols=calloc(nbits*2,sizeof(unsigned char));
     apmask=calloc(162,sizeof(unsigned char));
@@ -601,7 +591,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     int uniques=0, noprint=0, ndecodes_pass=0;
     
     struct result { char date[7]; char time[5]; float sync; float snr;
-                    float dt; double freq; char loc[7]; char pwr[4]; float drift;
+                    float dt; double freq; char loc[7]; char pwr[4]; char call[13]; float drift;
                     unsigned int cycles; int jitter; int blocksize; unsigned int metric; 
                     };
     struct result decodes[50];
@@ -834,10 +824,6 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
          */
         for (j=0; j<npk; j++) {
             memset(symbols,0,sizeof(char)*nbits*2);
-            memset(callsign,0,sizeof(char)*13);
-            memset(call_loc_pow,0,sizeof(char)*23);
-            memset(loc,0,sizeof(char)*7);
-            memset(pwr,0,sizeof(char)*4);
 
             f1=freq0[j];
             drift1=drift0[j];
@@ -898,9 +884,6 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
             float y,sq,rms;
             not_decoded=1;
             int ib=1, blocksize;
-#ifdef OSDWSPR
-            int n1,n2,n3,nadd,nu,ntype;  
-#endif
 
             while( ib <= nblocksize && not_decoded ) {
                 blocksize=ib;
@@ -932,45 +915,6 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                             not_decoded = fano(&metric,&cycles,&maxnp,decdata,symbols,nbits,
                                            mettab,delta,maxcycles);
                         }
-#ifdef OSDWSPR
-                        if( (ndepth >= 0) && not_decoded ) { 
-                            for(i=0; i<162; i++) {
-                                fsymbs[i]=symbols[i]-127;
-                            }
-                            osdwspr_(fsymbs,apmask,&ndepth,cw,&nhardmin,&dmin);
-                            for(i=0; i<162; i++) {
-                               symbols[i]=255*cw[i];
-                            }
-                            fano(&metric,&cycles,&maxnp,decdata,symbols,nbits,
-                                               mettab,delta,maxcycles);
-                            for(i=0; i<11; i++) {
-                                if( decdata[i]>127 ) {
-                                    message[i]=decdata[i]-256;
-                                } else {
-                                    message[i]=decdata[i];
-                                }
-                            }
-                            unpack50(message,&n1,&n2);
-                            if( !unpackcall(n1,callsign) ) break;
-                            callsign[12]=0;
-                            ntype = (n2&127) - 64;
-                            if( (ntype >= 0) && (ntype <= 62) ) {
-                                nu = ntype%10;
-                                if( !(nu == 0 || nu == 3 || nu == 7) ) {
-                                   nadd=nu;
-                                   if( nu > 3 ) nadd=nu-3;
-                                   if( nu > 7 ) nadd=nu-7;
-                                   n3=n2/128+32768*(nadd-1);
-                                   if( !unpackpfx(n3,callsign) ) break;
-                                }
-                                ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
-                                if(strncmp(chndata[chn].hashtab+ihash*13,callsign,13)==0) {  
-                                   not_decoded=0;
-                                   break;
-                                }
-                            } 
-                        }
-#endif
                     }
                     idt++;
                 }
@@ -978,6 +922,12 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
             } 
 
             if( worth_a_try && !not_decoded ) {
+    		char call_loc_pow[23];
+	 	char callsign[13];
+		char call[13];
+		char loc[7];
+		char pwr[4];
+
                 ndecodes_pass++;
                 
                 for(i=0; i<11; i++) {
@@ -993,10 +943,12 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                 // Unpack the decoded message, update the hashtable, apply
                 // sanity checks on grid and power, and return
                 // call_loc_pow string and also callsign (for de-duping).
-                noprint=unpk_(message,chndata[chn].hashtab,call_loc_pow,callsign,loc,pwr);
+		noprint=unpk_(message,chndata[chn].hashtab,callsign,call_loc_pow,call,loc,pwr);
+
+		if(noprint) continue;
 
                 // subtract even on last pass
-                if( subtraction && (ipass < npasses ) && !noprint ) {
+                if( subtraction && (ipass < npasses ) ) {
                     if( get_wspr_channel_symbols(call_loc_pow, chndata[chn].hashtab, channel_symbols) ) {
                         subtract_signal(idat, qdat, npoints, f1, shift1, drift1, channel_symbols);
                     } else {
@@ -1010,7 +962,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                     if(!strcmp(callsign,allcalls[i]) &&
                        (fabs(f1-allfreqs[i]) <3.0)) dupe=1;
                 }
-                if( (verbose || !dupe) && !noprint) {
+                if( !dupe) {
                     strcpy(allcalls[uniques],callsign);
                     allfreqs[uniques]=f1;
                     uniques++;
@@ -1028,6 +980,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                     decodes[uniques-1].dt=dt_print;
                     decodes[uniques-1].freq=freq_print;
                     decodes[uniques-1].drift=drift1;
+		    strcpy(decodes[uniques-1].call,call);
                     strcpy(decodes[uniques-1].loc,loc);
                     strcpy(decodes[uniques-1].pwr,pwr);
                     decodes[uniques-1].cycles=cycles;
@@ -1054,7 +1007,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     for (i=0; i<uniques; i++) {
 	postSpot(dec_options.date, dec_options.uttime, decodes[i].freq ,
 				 decodes[i].snr, decodes[i].dt, (int)decodes[i].drift,
-				 allcalls[i], decodes[i].loc, decodes[i].pwr);
+				 decodes[i].call, decodes[i].loc, decodes[i].pwr);
     }
 
    if(uniques ==0 ) 
