@@ -964,7 +964,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                                    if( !unpackpfx(n3,callsign) ) break;
                                 }
                                 ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
-                                if(strncmp(hashtab+ihash*13,callsign,13)==0) {  
+                                if(strncmp(chndata[chn].hashtab+ihash*13,callsign,13)==0) {  
                                    not_decoded=0;
                                    break;
                                 }
