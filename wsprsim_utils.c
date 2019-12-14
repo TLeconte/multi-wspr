@@ -166,7 +166,7 @@ int get_wspr_channel_symbols(char* rawmessage, char* hashtab, unsigned char* sym
     int m=0, ntype=0;
     long unsigned int n=0;
     int i, j, ihash;
-    unsigned char pr3[162]=
+    const unsigned char pr3[162]=
     {1,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,
         0,1,0,1,1,1,1,0,0,0,0,0,0,0,1,0,0,1,0,1,
         0,0,0,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,1,
@@ -178,7 +178,8 @@ int get_wspr_channel_symbols(char* rawmessage, char* hashtab, unsigned char* sym
         0,0};
     int nu[10]={0,-1,1,0,-1,2,1,0,-1,1};
     char *callsign, *grid, *powstr;
-    char grid4[5], message[23],loc[7],pwr[4];
+    char grid4[5], message[23];
+
     
     memset(message,0,sizeof(char)*23);
     i=0;
@@ -274,19 +275,6 @@ int get_wspr_channel_symbols(char* rawmessage, char* hashtab, unsigned char* sym
     data[9]=0;
     data[10]=0;
     
-    // make sure that the 11-byte data vector is unpackable
-    // unpack it with the routine that the decoder will use and display
-    // the result. let the operator decide whether it worked.
-    
-    char *check_call_loc_pow, *check_callsign;
-    check_call_loc_pow=malloc(sizeof(char)*23);
-    check_callsign=malloc(sizeof(char)*13);
-    signed char check_data[11];
-    memcpy(check_data,data,sizeof(char)*11);
-
-    unpk_(check_data,hashtab,check_call_loc_pow,check_callsign,loc,pwr);
-//    printf("Will decode as: %s\n",check_call_loc_pow);
- 
     unsigned int nbytes=11; // The message with tail is packed into almost 11 bytes.
     unsigned char channelbits[nbytes*8*2]; /* 162 rounded up */
     memset(channelbits,0,sizeof(char)*nbytes*8*2);
@@ -298,7 +286,5 @@ int get_wspr_channel_symbols(char* rawmessage, char* hashtab, unsigned char* sym
     for (i=0; i<162; i++) {
         symbols[i]=2*channelbits[i]+pr3[i];
     }
-    free(check_call_loc_pow);
-    free(check_callsign); 
     return 1;
 }
