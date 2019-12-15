@@ -336,9 +336,7 @@ int unpk_(signed char *message, char *hashtab, char *callsign, char *call_loc_po
         ihash=(n2-ntype-64)/128;
         if( strncmp(hashtab+ihash*13,"\0",1) != 0 ) {
             sprintf(callsign,"<%s>",hashtab+ihash*13);
-        } else {
-            sprintf(callsign,"%5s","<...>");
-        }
+        } else noprint=1;
 
         memset(call_loc_pow,0,sizeof(char)*23);
         sprintf(cdbm,"%2d",ndbm);
