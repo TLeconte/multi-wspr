@@ -485,7 +485,7 @@ void loadHashtable(uint32_t n, uint32_t fr)
 
 	memset(chndata[n].hashtab,0,32768*13);
 
-	sprintf(filename,"hash_%d.txt",fr/1000);
+	sprintf(filename,"/tmp/hash_%d.txt",fr/1000);
         if(stat(filename, &statbuf)) return;
 
 	if((statbuf.st_mtime+6*3600)<time(NULL)) return ;
@@ -505,7 +505,7 @@ void saveHashtable(uint32_t n, uint32_t fr)
 	FILE *fhash;
         char filename[256];
 
-	sprintf(filename,"hash_%d.txt",fr/1000);
+	sprintf(filename,"/tmp/hash_%d.txt",fr/1000);
         fhash=fopen(filename,"w");
         for (uint32_t i=0; i<32768; i++) {
             if( strncmp(chndata[n].hashtab+i*13,"\0",1) != 0 ) {
