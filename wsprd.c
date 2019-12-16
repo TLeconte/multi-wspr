@@ -68,7 +68,6 @@ static const unsigned char pr3[162]=
     0,0};
 
 
-struct decoder_options  dec_options;
 
 //***************************************************************************
 static void sync_and_demodulate(float *id, float *qd, long np,
@@ -552,7 +551,7 @@ void initwsprd(uint32_t nbc)
   }
 }
     
-void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t chn)
+void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t chn, char *p_date, char *p_uttime)
 {
 
     const float minrms=52.0 * (symfac/64.0);      //Final test for plausible decoding
@@ -590,8 +589,8 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     
     int uniques=0, noprint=0, ndecodes_pass=0;
     
-    struct result { char date[7]; char time[5]; float sync; float snr;
-                    float dt; double freq; char loc[7]; char pwr[4]; char call[13]; float drift;
+    struct result { float sync; float snr; float dt; double freq; 
+	 	    char loc[7]; char pwr[4]; char call[13]; float drift;
                     unsigned int cycles; int jitter; int blocksize; unsigned int metric; 
                     };
     struct result decodes[50];
@@ -973,8 +972,6 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                     freq_print=(fr+f1)/1e6;
                     dt_print=shift1*dt-1.0;
                     
-                    strcpy(decodes[uniques-1].date,dec_options.date);
-                    strcpy(decodes[uniques-1].time,dec_options.uttime);
                     decodes[uniques-1].sync=sync1;
                     decodes[uniques-1].snr=snr0[j];
                     decodes[uniques-1].dt=dt_print;
@@ -1005,13 +1002,13 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     }
     
     for (i=0; i<uniques; i++) {
-	postSpot(dec_options.date, dec_options.uttime, decodes[i].freq ,
+	postSpot(p_date, p_uttime, decodes[i].freq ,
 				 decodes[i].snr, decodes[i].dt, (int)decodes[i].drift,
 				 decodes[i].call, decodes[i].loc, decodes[i].pwr);
     }
 
    if(uniques ==0 ) 
-   	postNospot(dec_options.date, dec_options.uttime, fr/1e6);
+   	postNospot(p_date, p_uttime, fr/1e6);
 
     free(apmask);
     free(cw);

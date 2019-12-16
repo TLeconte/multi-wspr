@@ -30,17 +30,7 @@
 
 #pragma once
 
-/* Option & config of decoder (Shared with the wsprd code) */
-struct decoder_options {
-    uint32_t freq;         // Dial frequency
-    char     rcall[13];    // Callsign of the RX station
-    char     rloc[7];      // Locator of the RX station
-    char     date[7];      // Date & time of the processes samples
-    char     uttime[5];    //  ''
-};
-extern struct decoder_options  dec_options;
-
-extern void wspr_decode(float *idat, float *qdat, uint32_t npoints, uint32_t fr, uint32_t chn);
+extern void wspr_decode(float *idat, float *qdat, uint32_t npoints, uint32_t fr, uint32_t chn, char * p_date, char * p_uttime);
 extern void initwsprd(uint32_t nbc);
 
 extern void loadHashtable(uint32_t n , uint32_t fr);

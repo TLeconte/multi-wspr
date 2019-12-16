@@ -29,9 +29,8 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <curl/curl.h>
-#include "wsprd.h"
+#include "multi_wspr.h"
 
-extern struct receiver_options rx_options;
 
 typedef struct spot_s spot_t;
 struct spot_s {

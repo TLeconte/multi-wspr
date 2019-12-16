@@ -42,3 +42,15 @@ struct receiver_options {
     uint32_t rate;
     uint64_t serialnumber;
 };
+extern struct receiver_options rx_options;
+
+
+/* Option & config of decoder (Shared with the wsprd code) */
+struct decoder_options {
+    uint32_t freq;         // Dial frequency
+    char     rcall[13];    // Callsign of the RX station
+    char     rloc[7];      // Locator of the RX station
+    char     date[7];      // Date & time of the processes samples
+    char     uttime[5];    //  ''
+};
+extern struct decoder_options  dec_options;

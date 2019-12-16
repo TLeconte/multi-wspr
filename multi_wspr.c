@@ -195,6 +195,9 @@ int rx_callback(airspy_transfer_t* transfer) {
  
 static void *wsprDecoder(void *arg) {
     channel_t *chann=arg;
+    char     p_date[7];
+    char     p_uttime[5];
+
 
     while (1) {
     	sigbuff_t *sbuff;
@@ -209,6 +212,11 @@ static void *wsprDecoder(void *arg) {
         pthread_mutex_unlock(&(chann->sigbuff_mutex));
 
         //printf("1:wsprdecode %d %d\n",sbuff->len,chann->write_len);
+
+	if(chann->write_len==0) {
+               strcpy(p_date,dec_options.date);
+               strcpy(p_uttime,dec_options.uttime);
+	}
 
     	for(uint32_t i=0; i<sbuff->len; i++) {
 		uint32_t j,k;
@@ -263,7 +271,7 @@ static void *wsprDecoder(void *arg) {
         //printf("2:wsprdecode %d \n",chann->write_len);
 
         /* Search & decode the signal */
-        wspr_decode(chann->iSamples, chann->qSamples, chann->write_len, chann->fr, chann->nc);
+        wspr_decode(chann->iSamples, chann->qSamples, chann->write_len, chann->fr, chann->nc,p_date,p_uttime);
 	chann->write_len=0;
 
         //printf("3:wsprdecode done \n");
