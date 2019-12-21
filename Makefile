@@ -10,7 +10,7 @@ OBJS = multi_wspr.o wsprd.o wsprsim_utils.o wsprd_utils.o tab.o fano.o nhash.o w
 multi_wspr: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-multi_wsprd.o: filter.h freqsets.h multi_wspr.c
+multi_wspr.o: filter.h freqsets.h multi_wspr.c
 
 clean:
-	rm -f *.o airspy_wsprd
+	rm -f *.o multi_wspr
