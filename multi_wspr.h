@@ -25,32 +25,30 @@
  *
  */
 
-
 #pragma once
 
 #define AIRSPY_SAMPLE_RATE 20000000
 
 /* Option & config of the receiver */
 struct receiver_options {
-    uint32_t fset;
-    uint32_t realfreq;
-    uint32_t linearitygain;
-    uint32_t bias;
-    uint32_t packing;
-    int32_t  shift;
-    int32_t  upconverter;
-    uint32_t rate;
-    uint64_t serialnumber;
+	uint32_t fset;
+	uint32_t realfreq;
+	uint32_t linearitygain;
+	uint32_t bias;
+	uint32_t packing;
+	int32_t shift;
+	int32_t upconverter;
+	uint32_t rate;
+	uint64_t serialnumber;
 };
 extern struct receiver_options rx_options;
 
-
 /* Option & config of decoder (Shared with the wsprd code) */
 struct decoder_options {
-    uint32_t freq;         // Dial frequency
-    char     rcall[13];    // Callsign of the RX station
-    char     rloc[7];      // Locator of the RX station
-    char     date[7];      // Date & time of the processes samples
-    char     uttime[5];    //  ''
+	uint32_t freq;		// Dial frequency
+	char rcall[13];		// Callsign of the RX station
+	char rloc[7];		// Locator of the RX station
+	char date[7];		// Date & time of the processes samples
+	char uttime[5];		//  ''
 };
-extern struct decoder_options  dec_options;
+extern struct decoder_options dec_options;
