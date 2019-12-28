@@ -401,18 +401,22 @@ void sigint_callback_handler(int signum)
 
 void usage(void)
 {
+	uint32_t n,s;
+
 	fprintf(stderr,
 		"multi_wspr, a Multi-simultaneous frequency WSPR receiver for AirSpy sdr\n\n"
 		"Use:\tmulti_wspr -f frequency_set -c callsign -g locator [options]\n\n"
-		"\t-f frequency set :\n"
-		"\t\t0 : 137.5Khz\n"
-		"\t\t1 : 1.8381Mhz, 3.5701Mhz, 5.3647Mhz, 7.0401Mhz\n"
-		"\t\t2 : 3.5701Mhz, 5.3647Mhz, 7.0401Mhz, 10.1402Mhz\n"
-		"\t\t3 : 7.0401Mhz, 10.1402Mhz, 14.0971Mhz\n"
-		"\t\t4 : 10.1402Mhz, 14.0971Mhz, 18.1061Mhz\n"
-		"\t\t5 : 14.0971Mhz, 18.1061Mhz, 21.0961Mhz\n"
-		"\t\t6 : 18.1061Mhz, 21.0961Mhz, 24.9261Mhz\n"
-		"\t\t7 : 21.0961Mhz, 24.9261Mhz, 28.1261Mhz\n\n"
+		"\t-f frequency set :\n");
+
+	for (s = 0; s < NBFRSET; s++) {
+		fprintf(stderr, "\t\t%d : ",s);
+		for (n = 0; n < wsprfrsets[s].nbfr; n++) 
+			fprintf(stderr, " %gMhz ", (float)(wsprfrsets[s].fr[n])/1e6);
+		fprintf(stderr, "\n");
+	}
+	fprintf(stderr, "\n");
+
+	fprintf(stderr,
 		"\t-c your callsign (12 chars max)\n"
 		"\t-g your locator grid (6 chars max)\n"
 		"\nReceiver extra options:\n"
@@ -423,7 +427,7 @@ void usage(void)
 		"\t-k packing: Set packing for samples, \n"
 		"\t   1=enabled(12bits packed), 0=disabled(default 16bits not packed)\n"
 		"Example:\n"
-		"\tmulti_wspr -f 1 -u 120M -c F4DWV -g IN98bc -l 18 \n");
+		"\tmulti_wspr -f 2 -u 120M -c F4DWV -g IN98bc -l 17 \n");
 	exit(1);
 }
 
