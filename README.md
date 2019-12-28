@@ -8,13 +8,14 @@ multi_wspr, is a Multi-simultaneous frequency WSPR receiver for AirSpy SDR
 `multi_wspr -f frequency_set -c callsign -g locator [options]`
 
  -f frequency set :
- 1. 1.8381Mhz, 3.5701Mhz, 5.3647Mhz, 7.0401Mhz
- 2. 3.5701Mhz, 5.3647Mhz, 7.0401Mhz, 10.1402Mhz
- 3. 7.0401Mhz, 10.1402Mhz, 14.0971Mhz
- 4. 10.1402Mhz, 14.0971Mhz, 18.1061Mhz
- 5. 14.0971Mhz, 18.1061Mhz, 21.0961Mhz
- 6. 18.1061Mhz, 21.0961Mhz, 24.9261Mhz
- 7. 21.0961Mhz, 24.9261Mhz, 28.1261Mhz
+		0 :  1.8381Mhz  3.5701Mhz  5.2887Mhz  5.3662Mhz 
+		1 :  3.5701Mhz  5.2887Mhz  5.3662Mhz  7.0401Mhz 
+		2 :  5.2887Mhz  5.3662Mhz  7.0401Mhz  10.1402Mhz 
+		3 :  7.0401Mhz  10.1402Mhz  14.0971Mhz 
+		4 :  10.1402Mhz  14.0971Mhz  18.1061Mhz 
+		5 :  14.0971Mhz  18.1061Mhz  21.0961Mhz 
+		6 :  18.1061Mhz  21.0961Mhz  24.9261Mhz 
+		7 :  21.0961Mhz  24.9261Mhz  28.1261Mhz 
 
   -c your callsign (12 chars max)
   
