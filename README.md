@@ -1,5 +1,5 @@
 # MULTI_WSPR
-multi_wspr, is a simultaneous multi-band WSPR receiver for AirSpy SDR
+multi_wspr, is a simultaneous multi-band WSPR receiver for AirSpy SDR + upconverter
 
 ## Features
 **up to 4 frequencies received simultaneously**
@@ -33,6 +33,9 @@ Receiver extra options:
   
   -k packing: Set packing for samples, 
 	   1=enabled(12bits packed), 0=disabled(default 16bits not packed)
+
+### Note 
+WSPR beacons tranmit on a 200Hz wide band, so your airspya nd upconverter must have a very well calibrated frequency, or man could use the -p option to shift frequency.
 
 ## Example
 
