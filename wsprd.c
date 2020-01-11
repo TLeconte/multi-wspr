@@ -948,7 +948,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
 
                 // subtract even on last pass
                 if( subtraction && (ipass < npasses ) ) {
-                    if( get_wspr_channel_symbols(call_loc_pow, chndata[chn].hashtab, channel_symbols) ) {
+                    if( get_wspr_channel_symbols(call_loc_pow, channel_symbols) ) {
                         subtract_signal(idat, qdat, npoints, f1, shift1, drift1, channel_symbols);
                     } else {
                         break;
