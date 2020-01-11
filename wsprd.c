@@ -471,30 +471,29 @@ static void subtract_signal(float *id, float *qd, long np,
 typedef struct {
   fftwf_complex *fftin, *fftout;
   fftwf_plan PLAN;
-  char hashtab[32768*13];
+  hashtelt_t hashtab[32768];
 } chndata_t;
 static chndata_t chndata[4];
 
 void loadHashtable(uint32_t n, uint32_t fr)
 {
         FILE *fhash;
-        char line[80], hcall[12];
+        char line[80];
         char filename[256];
-	struct stat statbuf;
 
-	memset(chndata[n].hashtab,0,32768*13);
+	memset(chndata[n].hashtab,0,sizeof(hashtelt_t)*32768);
 
 	sprintf(filename,"/tmp/hash_%d.txt",fr/1000);
-        if(stat(filename, &statbuf)) return;
 
-	if((statbuf.st_mtime+6*3600)<time(NULL)) return ;
-	
         if((fhash=fopen(filename,"r"))==NULL) return ;
 
         while (fgets(line, sizeof(line), fhash) != NULL) {
   		int32_t nh;
-                sscanf(line,"%d %s",&nh,hcall);
-                strcpy(chndata[n].hashtab+nh*13,hcall);
+		time_t t;
+        	char hcall[13];
+                if(sscanf(line,"%d %ld %12s",&nh,&t,hcall)<3) continue;
+                strcpy(chndata[n].hashtab[nh].call,hcall);
+                chndata[n].hashtab[nh].t=t;
         }
         fclose(fhash);
 }
@@ -507,11 +506,35 @@ void saveHashtable(uint32_t n, uint32_t fr)
 	sprintf(filename,"/tmp/hash_%d.txt",fr/1000);
         fhash=fopen(filename,"w");
         for (uint32_t i=0; i<32768; i++) {
-            if( strncmp(chndata[n].hashtab+i*13,"\0",1) != 0 ) {
-                fprintf(fhash,"%5d %s\n",i,chndata[n].hashtab+i*13);
+            if( chndata[n].hashtab[i].t) {
+                fprintf(fhash,"%d %ld %s\n",i,chndata[n].hashtab[i].t,chndata[n].hashtab[i].call);
             }
         }
         fclose(fhash);
+}
+
+void insHashtable(hashtelt_t *hashtab,char *call)
+{
+  uint32_t ihash;
+  time_t t;
+
+  t=time(NULL);
+  ihash=nhash(call,strlen(call),(uint32_t)146);
+  strcpy(hashtab[ihash].call,call);
+  hashtab[ihash].t=t;
+	
+}
+
+char *getHashtable(hashtelt_t *hashtab,uint32_t ihash)
+{
+  time_t t;
+
+  t=time(NULL);
+  if(hashtab[ihash].t<t-7200) {
+ 	// too old
+	return NULL;
+  }
+  return hashtab[ihash].call;
 }
 
 // Parameters used for performance-tuning:

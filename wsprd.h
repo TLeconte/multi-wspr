@@ -30,9 +30,17 @@
 
 #pragma once
 
+typedef  struct {
+ time_t t ;
+ char call[13] ;
+}  hashtelt_t;
+
 extern void wspr_decode(float *idat, float *qdat, uint32_t npoints, uint32_t fr, uint32_t chn, char * p_date, char * p_uttime);
 extern void initwsprd(uint32_t nbc);
 
 extern void loadHashtable(uint32_t n , uint32_t fr);
 extern void saveHashtable(uint32_t n , uint32_t fr);
+extern void insHashtable(hashtelt_t *hashtab,char *call);
+extern char *getHashtable(hashtelt_t *hashtab,uint32_t ihash);
+
 

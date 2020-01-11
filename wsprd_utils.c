@@ -241,10 +241,10 @@ int floatcomp(const void* elem1, const void* elem2)
     return *(const float*)elem1 > *(const float*)elem2;
 }
 
-int unpk_(signed char *message, char *hashtab, char *callsign, char *call_loc_pow, char *call, char *loc, char *pwr)
+int unpk_(signed char *message, hashtelt_t *hashtab, char *callsign, char *call_loc_pow, char *call, char *loc, char *pwr)
 {
-    int n1,n2,n3,ndbm,ihash,nadd,noprint=0;
-    char grid[5],grid6[7],cdbm[3];
+    int n1,n2,n3,ndbm,nadd,ihash,noprint=0;
+    char grid[5],grid6[7],cdbm[3],*chash;
 
     unpack50(message,&n1,&n2);
     if( !unpackcall(n1,callsign) ) return 1;
@@ -276,8 +276,7 @@ int unpk_(signed char *message, char *hashtab, char *callsign, char *call_loc_po
             strncat(call_loc_pow," ",1);
             strncat(call_loc_pow,cdbm,2);
             strncat(call_loc_pow,"\0",1);
-            ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
-            strcpy(hashtab+ihash*13,callsign);
+	    insHashtable(hashtab,callsign);
 
             memset(call,0,strlen(callsign)+1);
             memset(loc,0,strlen(grid)+1);
@@ -304,8 +303,7 @@ int unpk_(signed char *message, char *hashtab, char *callsign, char *call_loc_po
             strncat(call_loc_pow,"\0",1);
             int nu=ndbm%10;
             if( nu == 0 || nu == 3 || nu == 7 || nu == 10 ) { //make sure power is OK
-                ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
-                strcpy(hashtab+ihash*13,callsign);
+	        insHashtable(hashtab,callsign);
             } else noprint=1;
 
             memset(call,0,strlen(callsign)+1);
@@ -329,13 +327,12 @@ int unpk_(signed char *message, char *hashtab, char *callsign, char *call_loc_po
             // not testing 4'th and 5'th chars because of this case: <PA0SKT/2> JO33 40
             // grid is only 4 chars even though this is a hashed callsign...
             //         isalpha(grid6[4]) && isalpha(grid6[5]) ) ) {
-            ihash=nhash(callsign,strlen(callsign),(uint32_t)146);
-            strcpy(hashtab+ihash*13,callsign);
+	    insHashtable(hashtab,callsign);
         } else noprint=1;
 
         ihash=(n2-ntype-64)/128;
-        if( strncmp(hashtab+ihash*13,"\0",1) != 0 ) {
-            sprintf(callsign,"<%s>",hashtab+ihash*13);
+        if( (chash = getHashtable(hashtab,ihash)) ) {
+            sprintf(callsign,"<%s>",chash);
         } else noprint=1;
 
         memset(call_loc_pow,0,sizeof(char)*23);

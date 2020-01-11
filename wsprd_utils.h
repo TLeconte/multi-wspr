@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <time.h>
 #include "nhash.h"
+#include "wsprd.h"
 
 void unpack50( signed char *dat, int32_t *n1, int32_t *n2 );
 
@@ -24,6 +25,6 @@ void deinterleave(unsigned char *sym);
 int doublecomp(const void* elem1, const void* elem2);
 int floatcomp(const void* elem1, const void* elem2);
 
-int unpk_( signed char *message, char* hashtab, char *callsign, char *call_loc_pow, char *call, char *loc, char *pwr);
+int unpk_( signed char *message, hashtelt_t* hashtab, char *callsign, char *call_loc_pow, char *call, char *loc, char *pwr);
 
 #endif
