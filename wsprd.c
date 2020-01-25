@@ -547,10 +547,10 @@ static const int subtraction=1;
 static const int npasses=2;
 static const int delta=60;                            //Fano threshold step
 static const float bias=0.45;                        //Fano metric bias (used for both Fano and stack algorithms)
-static const float frmin=-150, frmax=150;
 static const int more_candidates=1, stackdecoder=0;
 
 static int mettab[2][256];
+static float fftwindow[512];
 
 //***************************************************************************
 void initwsprd(uint32_t nbc)
@@ -563,6 +563,9 @@ void initwsprd(uint32_t nbc)
         mettab[1][i]=round( 10*(metric_tables[2][255-i]-bias) );
     }
 
+    for(i=0; i<512; i++) {
+        fftwindow[i]=sin(0.006147931*i);
+    }
     for(n=0;n<nbc;n++) {
 
      chndata[n].fftin=(fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex)*512);
@@ -620,39 +623,26 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
  
     // Do windowed ffts over 2 symbols, stepped by half symbols
     int nffts=4*floor(npoints/512)-1;
-    
     float ps[512][nffts];
-    float w[512];
-    for(i=0; i<512; i++) {
-        w[i]=sin(0.006147931*i);
-    }
-    
 
     //*************** main loop starts here *****************
     for (ipass=0; ipass<npasses; ipass++) {
         if(ipass == 0) {
             nblocksize=1;
-            maxdrift=4;
+            maxdrift=2;
             minsync2=0.12;
-        }
-        if(ipass == 1 ) {
-            if(block_demod == 1) {
-                nblocksize=3;  // try all blocksizes up to 3
-                maxdrift=0;    // no drift for smaller frequency estimator variance
-                minsync2=0.10;
-            } else {           // if called with -B, revert to "classic" wspr params 
-                nblocksize=1;
-                maxdrift=4;
-                minsync2=0.12;
-            }
+        } else {
+           nblocksize=3;  // try all blocksizes up to 3
+           maxdrift=1;    // no drift for smaller frequency estimator variance
+           minsync2=0.10;
         }
         ndecodes_pass=0;   // still needed?
         
         for (i=0; i<nffts; i++) {
             for(j=0; j<512; j++ ) {
                 k=i*128+j;
-                chndata[chn].fftin[j][0]=idat[k] * w[j];
-                chndata[chn].fftin[j][1]=qdat[k] * w[j];
+                chndata[chn].fftin[j][0]=idat[k] * fftwindow[j];
+                chndata[chn].fftin[j][1]=qdat[k] * fftwindow[j];
             }
             fftwf_execute(chndata[chn].PLAN);
             for (j=0; j<512; j++ ) {
@@ -671,26 +661,25 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
             }
         }
         
-        // Smooth with 7-point window and limit spectrum to +/-150 Hz
-        int window[7]={1,1,1,1,1,1,1};
-        float smspec[411];
-        for (i=0; i<411; i++) {
+        // Smooth with 7-point window 
+        float smspec[506];
+        for (i=0; i<506; i++) {
             smspec[i]=0.0;
             for(j=-3; j<=3; j++) {
-                k=256-205+i+j;
-                smspec[i]=smspec[i]+window[j+3]*psavg[k];
+                k=3+i+j;
+                smspec[i]=smspec[i]+psavg[k];
             }
         }
         
         // Sort spectrum values, then pick off noise level as a percentile
-        float tmpsort[411];
-        for (j=0; j<411; j++) {
+        float tmpsort[506];
+        for (j=0; j<506; j++) {
             tmpsort[j]=smspec[j];
         }
-        qsort(tmpsort, 411, sizeof(float), floatcomp);
+        qsort(tmpsort, 506, sizeof(float), floatcomp);
         
-        // Noise level of spectrum is estimated as 123/411= 30'th percentile
-        float noise_level = tmpsort[122];
+        // Noise level of spectrum is estimated as 152/506= 30'th percentile
+        float noise_level = tmpsort[152];
         
         /* Renormalize spectrum so that (large) peaks represent an estimate of snr.
          * We know from experience that threshold snr is near -7dB in wspr bandwidth,
@@ -700,7 +689,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
         float min_snr, snr_scaling_factor;
         min_snr = pow(10.0,-8.0/10.0); //this is min snr in wspr bw
         snr_scaling_factor=26.3;
-        for (j=0; j<411; j++) {
+        for (j=0; j<506; j++) {
             smspec[j]=smspec[j]/noise_level - 1.0;
             if( smspec[j] < min_snr) smspec[j]=0.1*min_snr;
             continue;
@@ -718,38 +707,27 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
         int npk=0;
         unsigned char candidate;
         if( more_candidates ) {
-            for(j=0; j<411; j=j+2) {
+            for(j=0; j<506; j=j+2) {
                 candidate = (smspec[j]>min_snr) && (npk<200);
                 if ( candidate ) {
-                    freq0[npk]=(j-205)*df;
+                    freq0[npk]=(j-253)*df;
                     snr0[npk]=10*log10(smspec[j])-snr_scaling_factor;
                     npk++;
                 }
             }
         } else {
-            for(j=1; j<410; j++) {
+            for(j=1; j<505; j++) {
                 candidate = (smspec[j]>smspec[j-1]) &&
                             (smspec[j]>smspec[j+1]) &&
                             (npk<200);
                 if ( candidate ) {
-                    freq0[npk]=(j-205)*df;
+                    freq0[npk]=(j-253)*df;
                     snr0[npk]=10*log10(smspec[j])-snr_scaling_factor;
                     npk++;
                 }
             }
         }
 
-        // Don't waste time on signals outside of the range [frmin,frmax].
-        i=0;
-        for( j=0; j<npk; j++) {
-            if( freq0[j] >= frmin && freq0[j] <= frmax ) {
-                freq0[i]=freq0[j];
-                snr0[i]=snr0[j];
-                i++;
-            }
-        }
-        npk=i;
-        
         // bubble sort on snr, bringing freq along for the ride
         int pass;
         float tmp;
