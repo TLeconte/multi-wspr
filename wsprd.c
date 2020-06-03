@@ -67,6 +67,7 @@ static const unsigned char pr3[162]=
     0,0,0,0,0,0,0,1,1,0,1,0,1,1,0,0,0,1,1,0,
     0,0};
 
+static struct snode *stack;
 
 
 //***************************************************************************
@@ -542,7 +543,6 @@ static const unsigned int maxcycles=10000;            //Decoder timeout limit
 static const float minsync1=0.10;                     //First sync limit
 static const int iifac=8;                             //Step size in final DT peakup
 static const int symfac=50;                           //Soft-symbol normalizing factor
-static const int block_demod=1;                       //use block demod on pass 2
 static const int subtraction=1;
 static const int npasses=2;
 static const int delta=60;                            //Fano threshold step
@@ -746,8 +746,8 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
         
         /* Make coarse estimates of shift (DT), freq, and drift
          
-         * Look for time offsets up to +/- 8 symbols (about +/- 5.4 s) relative
-         to nominal start time, which is 2 seconds into the file
+         * Look for time offsets up to -5/+11 symbols 
+         to nominal start time, which is 1/2 symbol into the file
          
          * Calculates shift relative to the beginning of the file
          
@@ -778,7 +778,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                         for (k=0; k<162; k++) {                             //Sum over symbols
                             ifd=ifr+((float)k-81.0)/81.0*( (float)idrift )/(2.0*df);
                             kindex=k0+2*k;
-                            if( kindex < nffts ) {
+                            if( kindex >= 0 && kindex < nffts ) {
                                 p0=ps[ifd-3][kindex];
                                 p1=ps[ifd-1][kindex];
                                 p2=ps[ifd+1][kindex];
@@ -971,7 +971,7 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
                     // truncate the power (TNX to DL8FCL!)
                     
                     freq_print=(fr+f1)/1e6;
-                    dt_print=shift1*dt-1.0;
+                    dt_print=shift1*dt-2;
                     
                     decodes[uniques-1].sync=sync1;
                     decodes[uniques-1].snr=snr0[j];

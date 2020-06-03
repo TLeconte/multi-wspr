@@ -15,7 +15,7 @@
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
  multi_wspr.c 
- Copyright (c) 2019, Thierry Leconte, F4DWV
+ Copyright (c) 2019-2020, Thierry Leconte, F4DWV
 
  This file as for origin :
  github/Guenael/airspy-wsprd/airspy_wsprd.c
@@ -374,16 +374,6 @@ void initSampleStorage()
 	}
 }
 
-/* Default options for the receiver */
-void initrx_options()
-{
-	rx_options.linearitygain = 12;
-	rx_options.bias = 0;	// No bias
-	rx_options.shift = 0;
-	rx_options.serialnumber = 0;
-	rx_options.packing = 0;
-}
-
 void sigint_callback_handler(int signum)
 {
 	uint32_t n;
@@ -437,14 +427,18 @@ int main(int argc, char **argv)
 	uint32_t n;
 	bool fst = true;
 
-	initrx_options();
+	memset(&rx_options,0,sizeof(rx_options));
+	rx_options.linearitygain = 12;
+
+	memset(&dec_options,0,sizeof(dec_options));
+	dec_options.wsprnet=1;
 
 	/* Stop condition setup */
 
 	if (argc <= 1)
 		usage();
 
-	while ((opt = getopt(argc, argv, "f:c:g:r:l:b:s:p:u:k:")) != -1) {
+	while ((opt = getopt(argc, argv, "f:c:g:r:l:b:s:p:u:k:nd:")) != -1) {
 		switch (opt) {
 		case 'c':	// Callsign
 			sprintf(dec_options.rcall, "%.12s", optarg);
@@ -484,17 +478,21 @@ int main(int argc, char **argv)
 				rx_options.packing = 0;
 			if (rx_options.packing >= 1)
 				rx_options.packing = 1;
+			break;
+		case 'n':
+			dec_options.wsprnet=0;
+			break;
 		default:
 			usage();
 			break;
 		}
 	}
 
-	if (dec_options.rcall[0] == 0) {
+	if (dec_options.wsprnet &&  dec_options.rcall[0] == 0) {
 		fprintf(stderr, "Please specify your callsign.\n");
 	}
 
-	if (dec_options.rloc[0] == 0) {
+	if (dec_options.wsprnet && dec_options.rloc[0] == 0) {
 		fprintf(stderr, "Please specify your locator.\n");
 	}
 
@@ -568,10 +566,10 @@ int main(int argc, char **argv)
 		int64_t usec, uwait;
 		struct timespec tp;
 
-		/* Wait for time Sync on 2 mins */
+		/* Wait for time Sync on 2 mins - 2s */
 		clock_gettime(CLOCK_REALTIME, &tp);
 		usec = tp.tv_sec * 1000000 + tp.tv_nsec / 1000;
-		uwait = 119000000 - usec % 120000000;
+		uwait = (120000000-1000000) - usec % 120000000;
 		if (uwait < 0)
 			uwait += 120000000;
 
@@ -582,18 +580,18 @@ int main(int argc, char **argv)
 
 		usleep(uwait);
 
-		/* Start to store the samples */
-		initSampleStorage();
-
-		/* Use the Store the date at the begin of the frame */
-		rawtime = time(NULL) + 1;
+		/* Use dec_options to store the date at the begin of the frame */
+		rawtime =  (usec+uwait+1000000)/1000000;
 		gtm = gmtime(&rawtime);
 		sprintf(dec_options.date, "%02d%02d%02d", gtm->tm_year - 100,
 			gtm->tm_mon + 1, gtm->tm_mday);
 		sprintf(dec_options.uttime, "%02d%02d", gtm->tm_hour,
 			gtm->tm_min);
 
-		usleep(100000000);
+		/* Start to store the samples */
+		initSampleStorage();
+
+		usleep(100*1000000);
 	}
 
 	return 0;
