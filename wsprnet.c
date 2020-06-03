@@ -118,8 +118,7 @@ static void *sendSpots(void *args)
 		pthread_mutex_unlock(&spot_mutex);
 
 		url[0] = 0;
-		if (dec_options.rcall[0] && dec_options.rloc[0]
-		    && spot->message)
+		if (dec_options.wsprnet && spot->message)
 			sprintf(url,
 				"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=1.0_multi_wspr&mode=2",
 				dec_options.rcall, dec_options.rloc, spot->freq,

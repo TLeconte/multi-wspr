@@ -25,6 +25,10 @@
  *
  */
 
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+
 #pragma once
 
 #define AIRSPY_SAMPLE_RATE 20000000
@@ -48,6 +52,8 @@ struct decoder_options {
 	uint32_t freq;		// Dial frequency
 	char rcall[13];		// Callsign of the RX station
 	char rloc[7];		// Locator of the RX station
+	bool wsprnet;
+	FILE *log;
 	char date[7];		// Date & time of the processes samples
 	char uttime[5];		//  ''
 };
