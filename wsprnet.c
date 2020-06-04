@@ -15,7 +15,7 @@
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
  wsprnet.c
- Copyright (c) 2019, Thierry Leconte, F4DWV
+ Copyright (c) 2019-2020, Thierry Leconte, F4DWV
 
  extracted from github/Guenael/airspy-wsprd/airspy_wsprd.c
  Copyright (c) 2016, Guenael
@@ -40,7 +40,6 @@ struct spot_s {
 	float snr;
 	float dt;
 	float drift;
-	char *message;
 	char *call;
 	char *loc;
 	char *pwr;
@@ -118,7 +117,7 @@ static void *sendSpots(void *args)
 		pthread_mutex_unlock(&spot_mutex);
 
 		url[0] = 0;
-		if (dec_options.wsprnet && spot->message)
+		if (dec_options.wsprnet)
 			sprintf(url,
 				"http://wsprnet.org/post?function=wspr&rcall=%s&rgrid=%s&rqrg=%.6f&date=%s&time=%s&sig=%.0f&dt=%.1f&tqrg=%.6f&tcall=%s&tgrid=%s&dbm=%s&version=1.0_multi_wspr&mode=2",
 				dec_options.rcall, dec_options.rloc, spot->freq,
@@ -135,10 +134,10 @@ static void *sendSpots(void *args)
 		if (url[0])
 			do {
 				if (curl == NULL) {
+					usleep(7000000);
 					curl = curl_easy_init();
 					if (curl == NULL) {
-						fprintf(stderr,
-							"curl_easy_init() failed\n");
+						fprintf(stderr, "curl_easy_init() failed\n");
 						break;
 					}
 					curl_easy_setopt(curl, CURLOPT_NOBODY,
@@ -150,8 +149,7 @@ static void *sendSpots(void *args)
 				curl_easy_setopt(curl, CURLOPT_URL, url);
 				res = curl_easy_perform(curl);
 				if (res != CURLE_OK) {
-					fprintf(stderr,
-						"curl_easy_perform() failed: %s\n",
+					fprintf(stderr, "curl_easy_perform() failed: %s\n",
 						curl_easy_strerror(res));
 					curl_easy_cleanup(curl);
 					curl = NULL;
