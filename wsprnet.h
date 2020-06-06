@@ -1,5 +1,5 @@
-void postSpot(char *date, char *uttime, double freq, float snr, float dt,
-	      float drift, char *call, char *loc, char *pwr);
+void postSpot(char *date, char *uttime, double freq, float sync , float snr, float dt,
+	      char *call, char *loc, char *pwr, float drift, int cycles, int jitter);
 void postNospot(char *date, char *uttime, double freq);
 
 void initWsprNet(void);

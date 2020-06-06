@@ -746,8 +746,8 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
         
         /* Make coarse estimates of shift (DT), freq, and drift
          
-         * Look for time offsets up to -5/+11 symbols 
-         to nominal start time, which is 1/2 symbol into the file
+         * Look for time offsets up to +/- 8 symbols (about +/- 5.4 s) relative
+         to nominal start time, which is 2 seconds into the file
          
          * Calculates shift relative to the beginning of the file
          
@@ -1003,9 +1003,8 @@ void wspr_decode(float *idat, float *qdat, uint32_t npoints,uint32_t fr,uint32_t
     }
     
     for (i=0; i<uniques; i++) {
-	postSpot(p_date, p_uttime, decodes[i].freq ,
-				 decodes[i].snr, decodes[i].dt, (int)decodes[i].drift,
-				 decodes[i].call, decodes[i].loc, decodes[i].pwr);
+	postSpot(p_date, p_uttime, decodes[i].freq , decodes[i].sync, decodes[i].snr, decodes[i].dt, 
+		 decodes[i].call, decodes[i].loc, decodes[i].pwr,decodes[i].drift, decodes[i].cycles,decodes[i].jitter);
     }
 
    if(uniques ==0 ) 

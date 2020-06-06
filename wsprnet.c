@@ -37,12 +37,16 @@ struct spot_s {
 	char *date;
 	char *uttime;
 	double freq;
+	float sync;
 	float snr;
 	float dt;
-	float drift;
+	int metric;
 	char *call;
 	char *loc;
 	char *pwr;
+	float drift;
+	int cycles;
+	int jitter;
 };
 
 static spot_t *spot_head = NULL;
@@ -51,8 +55,8 @@ static pthread_cond_t spot_cond;
 static pthread_mutex_t spot_mutex;
 static pthread_t spot_thread;
 
-void postSpot(char *date, char *uttime, double freq, float snr, float dt,
-	      float drift, char *call, char *loc, char *pwr)
+void postSpot(char *date, char *uttime, double freq, float sync , float snr, float dt,
+              char *call, char *loc, char *pwr, float drift, int cycles, int jitter)
 {
 	spot_t *spot;
 
@@ -62,16 +66,19 @@ void postSpot(char *date, char *uttime, double freq, float snr, float dt,
 	spot->date = strdup(date);
 	spot->uttime = strdup(uttime);
 	spot->freq = freq;
+	spot->sync = sync;
 	spot->snr = snr;
 	spot->dt = dt;
-	spot->drift = drift;
 	spot->call = strdup(call);
 	spot->loc = strdup(loc);
 	spot->pwr = strdup(pwr);
+	spot->drift = drift;
+	spot->cycles = cycles;
+	spot->jitter = jitter;
 
-	printf("%s %+3.2f %+4.2f %10.6f %2d  %s %s %s\n",
-	       spot->uttime, spot->snr, spot->dt, spot->freq, (int)spot->drift,
-	       spot->call, spot->loc, spot->pwr);
+	printf("%s %s %2d %+3.2f %+4.2f %10.6f %s %s %s %2d %2d %2d\n",
+	       spot->date,spot->uttime, (int)(10*(spot->sync)), spot->snr, spot->dt, spot->freq,
+	       spot->call, spot->loc, spot->pwr,(int)(spot->drift),spot->cycles/81,spot->jitter);
 	fflush(stdout);
 
 	/* put in list at tail */
